@@ -5,8 +5,22 @@ use jni::{
 use log::{debug, Level};
 use ndk::native_window::NativeWindow;
 
+mod support;
+
 fn render_to_native_window(window: NativeWindow) {
     debug!("{:?}", window);
+
+    let context = glutin::ContextBuilder::new()
+        .build_windowed(&window)
+        .unwrap();
+
+    let context = unsafe { context.make_current() }.unwrap();
+
+    let gl = support::load(&context);
+
+    gl.draw_frame([1.0, 0.5, 0.7, 1.0]);
+
+    context.swap_buffers().unwrap();
 }
 
 #[no_mangle]
