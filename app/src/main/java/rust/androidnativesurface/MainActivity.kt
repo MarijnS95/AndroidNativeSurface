@@ -1,10 +1,12 @@
 package rust.androidnativesurface
 
 import android.app.Activity
+import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.TextureView
 
 class MainActivity : Activity() {
     companion object {
@@ -37,5 +39,32 @@ class MainActivity : Activity() {
 //                    TODO("Not yet implemented")
             }
         })
+
+        val javaTextureView: TextureView = findViewById(R.id.java_texture_view)
+        println("Java TextureView: ${javaTextureView.surfaceTexture}")
+        javaTextureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(
+                surfaceTexture: SurfaceTexture,
+                p1: Int,
+                p2: Int
+            ) {
+                Surface(surfaceTexture).let { surface ->
+                    println("Java TextureView created: $surfaceTexture, $surface")
+                    renderToSurface(surface)
+                }
+            }
+
+            override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture, p1: Int, p2: Int) {
+                TODO("Not yet implemented")
+            }
+
+            override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
+                TODO("Not yet implemented")
+            }
+
+            override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
+//                TODO("Not yet implemented")
+            }
+        }
     }
 }
