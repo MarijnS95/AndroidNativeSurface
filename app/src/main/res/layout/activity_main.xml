@@ -15,6 +15,18 @@
     <SurfaceView
         android:id="@+id/surface_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:layout_weight="1" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/java_texture_view_name" />
+
+    <TextureView
+        android:id="@+id/java_texture_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_weight="1" />
 
 </LinearLayout>
