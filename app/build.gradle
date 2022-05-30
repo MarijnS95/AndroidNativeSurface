@@ -28,8 +28,24 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+
+    ndkVersion "24.0.7856742"
 }
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.7.0'
+}
+
+apply plugin: 'org.mozilla.rust-android-gradle.rust-android'
+
+cargo {
+    module = "../android_native_surface"
+    libname = "android_native_surface"
+    targets = ["arm64"]
+}
+
+tasks.whenTaskAdded { task ->
+    if ((task.name == 'javaPreCompileDebug' || task.name == 'javaPreCompileRelease')) {
+        task.dependsOn 'cargoBuild'
+    }
 }
