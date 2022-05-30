@@ -1,0 +1,14 @@
+[package]
+name = "android_native_surface"
+version = "0.1.0"
+authors = ["Marijn Suijten <marijns95@gmail.com>"]
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+android_logger = "0.11"
+jni = "0.19"
+log = "0.4"
+ndk = { git = "https://github.com/rust-windowing/android-ndk-rs", rev = "7e33384" }
