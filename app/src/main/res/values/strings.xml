@@ -2,4 +2,5 @@
 <resources>
     <string name="surface_view_name">SurfaceView</string>
     <string name="java_texture_view_name">TextureView with Java Surface</string>
+    <string name="rust_texture_view_name">TextureView with Rust Surface</string>
 </resources>
