@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/android_native_surface"
+    schedule:
+      interval: daily
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: daily
