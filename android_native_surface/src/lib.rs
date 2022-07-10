@@ -11,7 +11,7 @@ fn render_to_native_window(window: NativeWindow) {
     debug!("{:?}", window);
 
     let context = glutin::ContextBuilder::new()
-        .build_windowed(&window)
+        .build_windowed(&window, /* TODO: Size currently not needed */ (0, 0))
         .unwrap();
 
     let context = unsafe { context.make_current() }.unwrap();

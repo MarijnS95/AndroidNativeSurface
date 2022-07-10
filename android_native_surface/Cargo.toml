@@ -12,10 +12,10 @@ android_logger = "0.11"
 glutin = "0.28"
 jni = "0.19"
 log = "0.4"
-ndk = { git = "https://github.com/rust-windowing/android-ndk-rs", rev = "51f5fb0", features = ["api-level-28"] }
+ndk = { git = "https://github.com/rust-windowing/android-ndk-rs", rev = "e2d5b62", features = ["api-level-28"] }
 
 [build-dependencies]
 gl_generator = "0.14"
 
 [patch.crates-io]
-glutin = { git = "https://github.com/MarijnS95/glutin", rev = "642420b" }
+glutin = { git = "https://github.com/MarijnS95/glutin", rev = "bee362e" }
