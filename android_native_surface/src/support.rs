@@ -1,103 +1,206 @@
-// Copy-paste from https://github.com/rust-windowing/glutin/blob/master/glutin_examples/examples/support/mod.rs
+//! Support module for the glutin examples.
+//!
+//! Copy-paste from https://github.com/rust-windowing/glutin/blob/master/glutin_examples/examples/support/mod.rs,
+//! with `winit` support stripped out
 
-use glutin::{self, PossiblyCurrent};
+use std::{
+    ffi::{CStr, CString},
+    num::NonZeroU32,
+};
 
-use std::ffi::CStr;
+use glutin::{
+    config::{Config, ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder},
+    display::{Display, DisplayApiPreference},
+    prelude::*,
+    surface::{Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
+};
+use ndk::native_window::NativeWindow;
+use raw_window_handle::{HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 
 pub mod gl {
-    pub use self::Gles2 as Gl;
+    #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
+
+    pub use Gles2 as Gl;
 }
 
-pub struct Gl {
-    pub gl: gl::Gl,
+/// Structure to hold winit window and gl surface.
+pub struct GlWindow {
+    pub surface: Surface<WindowSurface>,
+    pub window: NativeWindow,
 }
 
-pub fn load(gl_context: &glutin::Context<PossiblyCurrent>) -> Gl {
-    let gl = gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
+impl GlWindow {
+    pub fn from_existing(display: &Display, window: NativeWindow, config: &Config) -> Self {
+        let attrs = surface_attributes(&window);
+        let surface = unsafe { display.create_window_surface(config, &attrs).unwrap() };
+        Self { window, surface }
+    }
+}
 
-    let version = unsafe {
-        let data = CStr::from_ptr(gl.GetString(gl::VERSION) as *const _)
-            .to_bytes()
-            .to_vec();
-        String::from_utf8(data).unwrap()
-    };
+/// Create template to find OpenGL config.
+pub fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
+    let builder = ConfigTemplateBuilder::new()
+        .with_alpha_size(8)
+        .compatible_with_native_window(raw_window_handle)
+        .with_surface_type(ConfigSurfaceTypes::WINDOW);
 
-    println!("OpenGL version {}", version);
+    builder.build()
+}
 
-    unsafe {
-        let vs = gl.CreateShader(gl::VERTEX_SHADER);
-        gl.ShaderSource(
-            vs,
-            1,
-            [VS_SRC.as_ptr() as *const _].as_ptr(),
-            std::ptr::null(),
-        );
-        gl.CompileShader(vs);
+/// Create surface attributes for window surface.
+pub fn surface_attributes(window: &NativeWindow) -> SurfaceAttributes<WindowSurface> {
+    let raw_window_handle = window.raw_window_handle();
+    SurfaceAttributesBuilder::<WindowSurface>::new().build(
+        raw_window_handle,
+        NonZeroU32::new(window.width().try_into().unwrap()).unwrap(),
+        NonZeroU32::new(window.height().try_into().unwrap()).unwrap(),
+    )
+}
 
-        let fs = gl.CreateShader(gl::FRAGMENT_SHADER);
-        gl.ShaderSource(
-            fs,
-            1,
-            [FS_SRC.as_ptr() as *const _].as_ptr(),
-            std::ptr::null(),
-        );
-        gl.CompileShader(fs);
+/// Create the display.
+pub fn create_display(raw_display: RawDisplayHandle) -> Display {
+    let preference = DisplayApiPreference::Egl;
 
-        let program = gl.CreateProgram();
-        gl.AttachShader(program, vs);
-        gl.AttachShader(program, fs);
-        gl.LinkProgram(program);
-        gl.UseProgram(program);
+    // Create connection to underlying OpenGL client Api.
+    unsafe { Display::from_raw(raw_display, preference).unwrap() }
+}
 
-        let mut vb = std::mem::zeroed();
-        gl.GenBuffers(1, &mut vb);
-        gl.BindBuffer(gl::ARRAY_BUFFER, vb);
-        gl.BufferData(
-            gl::ARRAY_BUFFER,
-            (VERTEX_DATA.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-            VERTEX_DATA.as_ptr() as *const _,
-            gl::STATIC_DRAW,
-        );
+pub struct Renderer {
+    program: gl::types::GLuint,
+    vao: gl::types::GLuint,
+    vbo: gl::types::GLuint,
+    gl: gl::Gl,
+}
 
-        if gl.BindVertexArray.is_loaded() {
+impl Renderer {
+    pub fn new(gl_display: &Display) -> Self {
+        unsafe {
+            let gl = gl::Gl::load_with(|symbol| {
+                let symbol = CString::new(symbol).unwrap();
+                gl_display.get_proc_address(symbol.as_c_str()).cast()
+            });
+
+            if let Some(renderer) = get_gl_string(&gl, gl::RENDERER) {
+                println!("Running on {}", renderer.to_string_lossy());
+            }
+            if let Some(version) = get_gl_string(&gl, gl::VERSION) {
+                println!("OpenGL Version {}", version.to_string_lossy());
+            }
+
+            if let Some(shaders_version) = get_gl_string(&gl, gl::SHADING_LANGUAGE_VERSION) {
+                println!("Shaders version on {}", shaders_version.to_string_lossy());
+            }
+
+            let vertex_shader = create_shader(&gl, gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE);
+            let fragment_shader = create_shader(&gl, gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
+
+            let program = gl.CreateProgram();
+
+            gl.AttachShader(program, vertex_shader);
+            gl.AttachShader(program, fragment_shader);
+
+            gl.LinkProgram(program);
+
+            gl.UseProgram(program);
+
+            gl.DeleteShader(vertex_shader);
+            gl.DeleteShader(fragment_shader);
+
             let mut vao = std::mem::zeroed();
             gl.GenVertexArrays(1, &mut vao);
             gl.BindVertexArray(vao);
-        }
 
-        let pos_attrib = gl.GetAttribLocation(program, b"position\0".as_ptr() as *const _);
-        let color_attrib = gl.GetAttribLocation(program, b"color\0".as_ptr() as *const _);
-        gl.VertexAttribPointer(
-            pos_attrib as gl::types::GLuint,
-            2,
-            gl::FLOAT,
-            0,
-            5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-            std::ptr::null(),
-        );
-        gl.VertexAttribPointer(
-            color_attrib as gl::types::GLuint,
-            3,
-            gl::FLOAT,
-            0,
-            5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-            (2 * std::mem::size_of::<f32>()) as *const () as *const _,
-        );
-        gl.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
-        gl.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
+            let mut vbo = std::mem::zeroed();
+            gl.GenBuffers(1, &mut vbo);
+            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl.BufferData(
+                gl::ARRAY_BUFFER,
+                (VERTEX_DATA.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                VERTEX_DATA.as_ptr() as *const _,
+                gl::STATIC_DRAW,
+            );
+
+            let pos_attrib = gl.GetAttribLocation(program, b"position\0".as_ptr() as *const _);
+            let color_attrib = gl.GetAttribLocation(program, b"color\0".as_ptr() as *const _);
+            gl.VertexAttribPointer(
+                pos_attrib as gl::types::GLuint,
+                2,
+                gl::FLOAT,
+                0,
+                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                std::ptr::null(),
+            );
+            gl.VertexAttribPointer(
+                color_attrib as gl::types::GLuint,
+                3,
+                gl::FLOAT,
+                0,
+                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                (2 * std::mem::size_of::<f32>()) as *const () as *const _,
+            );
+            gl.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
+            gl.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
+
+            Self {
+                program,
+                vao,
+                vbo,
+                gl,
+            }
+        }
     }
 
-    Gl { gl }
-}
-
-impl Gl {
-    pub fn draw_frame(&self, color: [f32; 4]) {
+    pub fn draw(&self) {
         unsafe {
-            self.gl.ClearColor(color[0], color[1], color[2], color[3]);
+            self.gl.UseProgram(self.program);
+
+            self.gl.BindVertexArray(self.vao);
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+
+            self.gl.ClearColor(0.1, 0.1, 0.1, 0.9);
             self.gl.Clear(gl::COLOR_BUFFER_BIT);
             self.gl.DrawArrays(gl::TRIANGLES, 0, 3);
         }
+    }
+
+    pub fn resize(&self, width: i32, height: i32) {
+        unsafe {
+            self.gl.Viewport(0, 0, width, height);
+        }
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            self.gl.DeleteProgram(self.program);
+            self.gl.DeleteBuffers(1, &self.vbo);
+            self.gl.DeleteVertexArrays(1, &self.vao);
+        }
+    }
+}
+
+unsafe fn create_shader(
+    gl: &gl::Gl,
+    shader: gl::types::GLenum,
+    source: &[u8],
+) -> gl::types::GLuint {
+    let shader = gl.CreateShader(shader);
+    gl.ShaderSource(
+        shader,
+        1,
+        [source.as_ptr().cast()].as_ptr(),
+        std::ptr::null(),
+    );
+    gl.CompileShader(shader);
+    shader
+}
+
+fn get_gl_string(gl: &gl::Gl, variant: gl::types::GLenum) -> Option<&'static CStr> {
+    unsafe {
+        let s = gl.GetString(variant);
+        (!s.is_null()).then(|| CStr::from_ptr(s.cast()))
     }
 }
 
@@ -108,7 +211,7 @@ static VERTEX_DATA: [f32; 15] = [
      0.5, -0.5,  0.0,  0.0,  1.0,
 ];
 
-const VS_SRC: &[u8] = b"
+const VERTEX_SHADER_SOURCE: &[u8] = b"
 #version 100
 precision mediump float;
 
@@ -123,7 +226,7 @@ void main() {
 }
 \0";
 
-const FS_SRC: &[u8] = b"
+const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 #version 100
 precision mediump float;
 
@@ -133,245 +236,3 @@ void main() {
     gl_FragColor = vec4(v_color, 1.0);
 }
 \0";
-
-pub use self::context_tracker::{ContextCurrentWrapper, ContextId, ContextTracker, ContextWrapper};
-
-#[allow(dead_code)] // Not used by all examples
-mod context_tracker {
-    use glutin::{
-        self, Context, ContextCurrentState, ContextError, NotCurrent, PossiblyCurrent,
-        WindowedContext,
-    };
-
-    pub enum ContextWrapper<T: ContextCurrentState> {
-        Headless(Context<T>),
-        Windowed(WindowedContext<T>),
-    }
-
-    impl<T: ContextCurrentState> ContextWrapper<T> {
-        pub fn headless(&mut self) -> &mut Context<T> {
-            match self {
-                ContextWrapper::Headless(ref mut ctx) => ctx,
-                _ => panic!(),
-            }
-        }
-
-        pub fn windowed(&mut self) -> &mut WindowedContext<T> {
-            match self {
-                ContextWrapper::Windowed(ref mut ctx) => ctx,
-                _ => panic!(),
-            }
-        }
-
-        fn map<T2: ContextCurrentState, FH, FW>(
-            self,
-            fh: FH,
-            fw: FW,
-        ) -> Result<ContextWrapper<T2>, (Self, ContextError)>
-        where
-            FH: FnOnce(Context<T>) -> Result<Context<T2>, (Context<T>, ContextError)>,
-            FW: FnOnce(
-                WindowedContext<T>,
-            )
-                -> Result<WindowedContext<T2>, (WindowedContext<T>, ContextError)>,
-        {
-            match self {
-                ContextWrapper::Headless(ctx) => match fh(ctx) {
-                    Ok(ctx) => Ok(ContextWrapper::Headless(ctx)),
-                    Err((ctx, err)) => Err((ContextWrapper::Headless(ctx), err)),
-                },
-                ContextWrapper::Windowed(ctx) => match fw(ctx) {
-                    Ok(ctx) => Ok(ContextWrapper::Windowed(ctx)),
-                    Err((ctx, err)) => Err((ContextWrapper::Windowed(ctx), err)),
-                },
-            }
-        }
-    }
-
-    pub enum ContextCurrentWrapper {
-        PossiblyCurrent(ContextWrapper<PossiblyCurrent>),
-        NotCurrent(ContextWrapper<NotCurrent>),
-    }
-
-    impl ContextCurrentWrapper {
-        fn map_possibly<F>(self, f: F) -> Result<Self, (Self, ContextError)>
-        where
-            F: FnOnce(
-                ContextWrapper<PossiblyCurrent>,
-            ) -> Result<
-                ContextWrapper<NotCurrent>,
-                (ContextWrapper<PossiblyCurrent>, ContextError),
-            >,
-        {
-            match self {
-                ret @ ContextCurrentWrapper::NotCurrent(_) => Ok(ret),
-                ContextCurrentWrapper::PossiblyCurrent(ctx) => match f(ctx) {
-                    Ok(ctx) => Ok(ContextCurrentWrapper::NotCurrent(ctx)),
-                    Err((ctx, err)) => Err((ContextCurrentWrapper::PossiblyCurrent(ctx), err)),
-                },
-            }
-        }
-
-        fn map_not<F>(self, f: F) -> Result<Self, (Self, ContextError)>
-        where
-            F: FnOnce(
-                ContextWrapper<NotCurrent>,
-            ) -> Result<
-                ContextWrapper<PossiblyCurrent>,
-                (ContextWrapper<NotCurrent>, ContextError),
-            >,
-        {
-            match self {
-                ret @ ContextCurrentWrapper::PossiblyCurrent(_) => Ok(ret),
-                ContextCurrentWrapper::NotCurrent(ctx) => match f(ctx) {
-                    Ok(ctx) => Ok(ContextCurrentWrapper::PossiblyCurrent(ctx)),
-                    Err((ctx, err)) => Err((ContextCurrentWrapper::NotCurrent(ctx), err)),
-                },
-            }
-        }
-    }
-
-    pub type ContextId = usize;
-    #[derive(Default)]
-    pub struct ContextTracker {
-        current: Option<ContextId>,
-        others: Vec<(ContextId, Option<ContextCurrentWrapper>)>,
-        next_id: ContextId,
-    }
-
-    impl ContextTracker {
-        pub fn insert(&mut self, ctx: ContextCurrentWrapper) -> ContextId {
-            let id = self.next_id;
-            self.next_id += 1;
-
-            if let ContextCurrentWrapper::PossiblyCurrent(_) = ctx {
-                if let Some(old_current) = self.current {
-                    unsafe {
-                        self.modify(old_current, |ctx| {
-                            ctx.map_possibly(|ctx| {
-                                ctx.map(
-                                    |ctx| Ok(ctx.treat_as_not_current()),
-                                    |ctx| Ok(ctx.treat_as_not_current()),
-                                )
-                            })
-                        })
-                        .unwrap()
-                    }
-                }
-                self.current = Some(id);
-            }
-
-            self.others.push((id, Some(ctx)));
-            id
-        }
-
-        pub fn remove(&mut self, id: ContextId) -> ContextCurrentWrapper {
-            if Some(id) == self.current {
-                self.current.take();
-            }
-
-            let this_index = self
-                .others
-                .binary_search_by(|(sid, _)| sid.cmp(&id))
-                .unwrap();
-            self.others.remove(this_index).1.unwrap()
-        }
-
-        fn modify<F>(&mut self, id: ContextId, f: F) -> Result<(), ContextError>
-        where
-            F: FnOnce(
-                ContextCurrentWrapper,
-            )
-                -> Result<ContextCurrentWrapper, (ContextCurrentWrapper, ContextError)>,
-        {
-            let this_index = self
-                .others
-                .binary_search_by(|(sid, _)| sid.cmp(&id))
-                .unwrap();
-
-            let this_context = self.others[this_index].1.take().unwrap();
-
-            match f(this_context) {
-                Err((ctx, err)) => {
-                    self.others[this_index].1 = Some(ctx);
-                    Err(err)
-                }
-                Ok(ctx) => {
-                    self.others[this_index].1 = Some(ctx);
-                    Ok(())
-                }
-            }
-        }
-
-        pub fn get_current(
-            &mut self,
-            id: ContextId,
-        ) -> Result<&mut ContextWrapper<PossiblyCurrent>, ContextError> {
-            unsafe {
-                let this_index = self
-                    .others
-                    .binary_search_by(|(sid, _)| sid.cmp(&id))
-                    .unwrap();
-                if Some(id) != self.current {
-                    let old_current = self.current.take();
-
-                    if let Err(err) = self.modify(id, |ctx| {
-                        ctx.map_not(|ctx| {
-                            ctx.map(|ctx| ctx.make_current(), |ctx| ctx.make_current())
-                        })
-                    }) {
-                        // Oh noes, something went wrong
-                        // Let's at least make sure that no context is current.
-                        if let Some(old_current) = old_current {
-                            if let Err(err2) = self.modify(old_current, |ctx| {
-                                ctx.map_possibly(|ctx| {
-                                    ctx.map(
-                                        |ctx| ctx.make_not_current(),
-                                        |ctx| ctx.make_not_current(),
-                                    )
-                                })
-                            }) {
-                                panic!(
-                                    "Could not `make_current` nor `make_not_current`, {:?}, {:?}",
-                                    err, err2
-                                );
-                            }
-                        }
-
-                        if let Err(err2) = self.modify(id, |ctx| {
-                            ctx.map_possibly(|ctx| {
-                                ctx.map(|ctx| ctx.make_not_current(), |ctx| ctx.make_not_current())
-                            })
-                        }) {
-                            panic!(
-                                "Could not `make_current` nor `make_not_current`, {:?}, {:?}",
-                                err, err2
-                            );
-                        }
-
-                        return Err(err);
-                    }
-
-                    self.current = Some(id);
-
-                    if let Some(old_current) = old_current {
-                        self.modify(old_current, |ctx| {
-                            ctx.map_possibly(|ctx| {
-                                ctx.map(
-                                    |ctx| Ok(ctx.treat_as_not_current()),
-                                    |ctx| Ok(ctx.treat_as_not_current()),
-                                )
-                            })
-                        })
-                        .unwrap();
-                    }
-                }
-
-                match self.others[this_index].1.as_mut().unwrap() {
-                    ContextCurrentWrapper::PossiblyCurrent(ref mut ctx) => Ok(ctx),
-                    ContextCurrentWrapper::NotCurrent(_) => panic!(),
-                }
-            }
-        }
-    }
-}

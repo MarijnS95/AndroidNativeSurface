@@ -1,26 +1,86 @@
+use glutin::{
+    context::{ContextApi, ContextAttributesBuilder},
+    prelude::*,
+};
 use jni::{
     objects::{JClass, JObject},
     JNIEnv,
 };
 use log::{debug, Level};
 use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
+use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
 mod support;
 
 fn render_to_native_window(window: NativeWindow) {
     debug!("{:?}", window);
 
-    let context = glutin::ContextBuilder::new()
-        .build_windowed(&window, /* TODO: Size currently not needed */ (0, 0))
-        .unwrap();
+    // TODO: NDK should implement this!
+    // let raw_display_handle = window.raw_display_handle();
+    let raw_display_handle = RawDisplayHandle::Android(AndroidDisplayHandle::empty());
+    let raw_window_handle = window.raw_window_handle();
 
-    let context = unsafe { context.make_current() }.unwrap();
+    let gl_display = support::create_display(raw_display_handle);
 
-    let gl = support::load(&context);
+    let template = support::config_template(raw_window_handle);
+    let config = unsafe {
+        gl_display
+            .find_configs(template)
+            .unwrap()
+            .reduce(|accum, config| {
+                // Find the config with the maximum number of samples.
+                //
+                // In general if you're not sure what you want in template you can request or
+                // don't want to require multisampling for example, you can search for a
+                // specific option you want afterwards.
+                //
+                // XXX however on macOS you can request only one config, so you should do
+                // a search with the help of `find_configs` and adjusting your template.
+                if config.num_samples() > accum.num_samples() {
+                    config
+                } else {
+                    accum
+                }
+            })
+            .unwrap()
+    };
 
-    gl.draw_frame([1.0, 0.5, 0.7, 1.0]);
+    println!("Picked a config with {} samples", config.num_samples());
+    // Create a wrapper for GL window and surface.
+    let gl_window = support::GlWindow::from_existing(&gl_display, window, &config);
 
-    context.swap_buffers().unwrap();
+    // The context creation part. It can be created before surface and that's how
+    // it's expected in multithreaded + multiwindow operation mode, since you
+    // can send NotCurrentContext, but not Surface.
+    let context_attributes = ContextAttributesBuilder::new().build(Some(raw_window_handle));
+
+    // Since glutin by default tries to create OpenGL core context, which may not be
+    // present we should try gles.
+    let fallback_context_attributes = ContextAttributesBuilder::new()
+        .with_context_api(ContextApi::Gles(None))
+        .build(Some(raw_window_handle));
+    let gl_context = unsafe {
+        gl_display
+            .create_context(&config, &context_attributes)
+            .unwrap_or_else(|_| {
+                gl_display
+                    .create_context(&config, &fallback_context_attributes)
+                    .expect("failed to create context")
+            })
+    };
+
+    // Make it current and load symbols.
+    let gl_context = gl_context.make_current(&gl_window.surface).unwrap();
+
+    let renderer = support::Renderer::new(&gl_display);
+    renderer.resize(
+        gl_window.window.width() as i32,
+        gl_window.window.height() as i32,
+    );
+
+    renderer.draw();
+
+    gl_window.surface.swap_buffers(&gl_context).unwrap();
 }
 
 #[no_mangle]
