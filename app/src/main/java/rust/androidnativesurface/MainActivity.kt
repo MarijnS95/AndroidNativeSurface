@@ -32,8 +32,9 @@ class MainActivity : Activity() {
                 renderToSurface(holder.surface)
             }
 
-            override fun surfaceChanged(p0: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
-//                    TODO("Not yet implemented")
+            override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
+                println("SurfaceView changed: ${holder.surface}")
+                renderToSurface(holder.surface)
             }
 
             override fun surfaceDestroyed(p0: SurfaceHolder) {
@@ -55,12 +56,20 @@ class MainActivity : Activity() {
                 }
             }
 
-            override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture, p1: Int, p2: Int) {
-                TODO("Not yet implemented")
+            override fun onSurfaceTextureSizeChanged(
+                surfaceTexture: SurfaceTexture,
+                p1: Int,
+                p2: Int
+            ) {
+                Surface(surfaceTexture).let { surface ->
+                    println("Java TextureView resized: $surfaceTexture, $surface")
+                    renderToSurface(surface)
+                }
             }
 
             override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
-                TODO("Not yet implemented")
+//                TODO("Not yet implemented")
+                return true
             }
 
             override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
@@ -80,12 +89,18 @@ class MainActivity : Activity() {
                 renderToSurfaceTexture(surfaceTexture)
             }
 
-            override fun onSurfaceTextureSizeChanged(p0: SurfaceTexture, p1: Int, p2: Int) {
-                TODO("Not yet implemented")
+            override fun onSurfaceTextureSizeChanged(
+                surfaceTexture: SurfaceTexture,
+                p1: Int,
+                p2: Int
+            ) {
+                println("Rust TextureView resized: $surfaceTexture")
+                renderToSurfaceTexture(surfaceTexture)
             }
 
             override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
-                TODO("Not yet implemented")
+//                TODO("Not yet implemented")
+                return true
             }
 
             override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
