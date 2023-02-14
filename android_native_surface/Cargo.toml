@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 android_logger = "0.11"
 glutin = "0.30.0-beta.2"
-jni = "0.19"
+jni = "0.21"
 log = "0.4"
 ndk = { git = "https://github.com/rust-windowing/android-ndk-rs", rev = "25e647a", features = ["api-level-28"] }
 raw-window-handle = "0.5"
