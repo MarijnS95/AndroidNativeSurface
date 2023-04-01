@@ -63,7 +63,7 @@ pub fn create_display(raw_display: RawDisplayHandle) -> Display {
     let preference = DisplayApiPreference::Egl;
 
     // Create connection to underlying OpenGL client Api.
-    unsafe { Display::from_raw(raw_display, preference).unwrap() }
+    unsafe { Display::new(raw_display, preference).unwrap() }
 }
 
 pub struct Renderer {

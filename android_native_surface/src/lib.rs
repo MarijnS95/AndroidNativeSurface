@@ -6,7 +6,7 @@ use jni::{
     objects::{JClass, JObject},
     JNIEnv,
 };
-use log::{debug, Level};
+use log::{debug, LevelFilter};
 use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
@@ -88,7 +88,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     _env: JNIEnv,
     _class: JClass,
 ) {
-    android_logger::init_once(android_logger::Config::default().with_min_level(Level::Trace));
+    android_logger::init_once(android_logger::Config::default().with_max_level(LevelFilter::Trace));
 }
 
 #[no_mangle]
@@ -100,7 +100,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     debug!("Java Surface: {:?}", surface);
 
     let window =
-        unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.into_inner()) }
+        unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.into_raw()) }
             .unwrap();
 
     render_to_native_window(window)
@@ -115,11 +115,8 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     debug!("Java SurfaceTexture: {:?}", surface_texture);
 
     let surface_texture = unsafe {
-        SurfaceTexture::from_surface_texture(
-            env.get_native_interface(),
-            surface_texture.into_inner(),
-        )
-        .unwrap()
+        SurfaceTexture::from_surface_texture(env.get_native_interface(), surface_texture.into_raw())
+            .unwrap()
     };
 
     let window = surface_texture.acquire_native_window().unwrap();
