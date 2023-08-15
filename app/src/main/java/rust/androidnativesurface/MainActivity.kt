@@ -2,11 +2,22 @@ package rust.androidnativesurface
 
 import android.app.Activity
 import android.graphics.SurfaceTexture
+import android.hardware.HardwareBuffer
+import android.hardware.SyncFence
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.view.Surface
+import android.view.SurfaceControl
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
+import java.io.FileDescriptor
+
+data class RenderedHardwareBuffer(
+    val hardware_buffer: HardwareBuffer,
+    val fd: Int
+)
+
 
 class MainActivity : Activity() {
     companion object {
@@ -18,6 +29,8 @@ class MainActivity : Activity() {
         private external fun init()
         external fun renderToSurface(surface: Surface)
         external fun renderToSurfaceTexture(surfaceTexture: SurfaceTexture)
+
+        external fun renderHardwareBuffer() // : RenderedHardwareBuffer
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,9 +39,28 @@ class MainActivity : Activity() {
 
         val surfaceView: SurfaceView = findViewById(R.id.surface_view)
         println("SurfaceView: ${surfaceView.holder.surface}")
+
+
+        renderHardwareBuffer()
+//
+//        val hwbuf = renderHardwareBuffer()
+//        println("Have HardwareBuffer ${hwbuf.hardware_buffer}, wait for fd ${hwbuf.fd}")
+//        val t = SurfaceControl.Transaction()
+//
+//        // TODO: This is @hide :(
+//        val f = SyncFence.create(ParcelFileDescriptor.adoptFd(hwbuf.fd))
+//        println("Fence $f")
+//        t.setBuffer(
+//            surfaceView.surfaceControl,
+//            hwbuf.hardware_buffer,
+//            f
+//        )
+        return
+
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 println("SurfaceView created: ${holder.surface}")
+//                holder.surface.attachAndQueueBufferWithColorSpace()
                 renderToSurface(holder.surface)
             }
 

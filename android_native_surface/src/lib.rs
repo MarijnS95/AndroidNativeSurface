@@ -1,7 +1,9 @@
 use std::{
     fs::File,
     io::{self, BufRead, BufReader},
+    os::fd::{AsFd, FromRawFd, RawFd},
     thread,
+    time::Instant,
 };
 
 use glutin::{
@@ -13,8 +15,15 @@ use jni::{
     JNIEnv,
 };
 use log::{debug, info, LevelFilter};
-use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
+use ndk::{
+    hardware_buffer::HardwareBufferUsage,
+    media::image_reader::{ImageFormat, ImageReader},
+    native_window::NativeWindow,
+    surface_texture::SurfaceTexture,
+    sync::SyncFileInfo,
+};
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
+use rustix::event::{PollFd, PollFlags};
 
 mod support;
 
@@ -147,4 +156,57 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     let window = surface_texture.acquire_native_window().unwrap();
 
     render_to_native_window(window)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companion_renderHardwareBuffer(
+    mut env: JNIEnv,
+    _class: JClass,
+) {
+    debug!("SurfaceControl hack");
+
+    let cls = env
+        .find_class("rust/androidnativesurface/RenderedHardwareBuffer")
+        .unwrap();
+    dbg!(cls);
+    let image_reader = ImageReader::new(100, 100, ImageFormat::RGBA_8888, 10).expect("ImageReader");
+    let window = image_reader.window().expect("NativeWindow");
+    dbg!(&image_reader, &window);
+
+    debug!(
+        "Acquire before {:?}",
+        image_reader.acquire_latest_image_async()
+    );
+
+    render_to_native_window(window);
+
+    let (image, fd) = image_reader.acquire_latest_image_async().unwrap();
+    dbg!(&image, &fd);
+
+    if let Some(fd) = &fd {
+        let sync_file_info = SyncFileInfo::new(fd.as_fd()).expect("SyncFileInfo");
+        dbg!(&sync_file_info);
+    }
+
+    let hwbuf = image.hardware_buffer().unwrap();
+    dbg!(&hwbuf);
+    dbg!(hwbuf.describe());
+
+    if let Some(fd) = &fd {
+        let x = Instant::now();
+        let mut pfd = PollFd::new(fd, PollFlags::all());
+        rustix::event::poll(std::slice::from_mut(&mut pfd), -1).unwrap();
+        debug!("Polling on fd took {:.3?}: {pfd:?}", x.elapsed());
+    }
+    let x = Instant::now();
+    // let map = hwbuf.lock(HardwareBufferUsage::CPU_READ_OFTEN, None, None);
+    let map = hwbuf.lock(HardwareBufferUsage::CPU_READ_OFTEN, fd, None);
+    debug!("Locking with fd took {:.3?}", x.elapsed());
+    debug!("map {:?}", map);
+    debug!("unlock async {:?}", hwbuf.unlock_async());
+
+    // let obj = env.alloc_object(cls).unwrap();
+    // dbg!(obj);
+    // env.new_object(cls, ctor_sig, ctor_args)
+    // hwbuf.to_jni(env)
 }
