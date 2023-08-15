@@ -1,3 +1,10 @@
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    os::fd::{FromRawFd, RawFd},
+    thread,
+};
+
 use glutin::{
     context::{ContextApi, ContextAttributesBuilder},
     prelude::*,
@@ -6,14 +13,14 @@ use jni::{
     objects::{JClass, JObject},
     JNIEnv,
 };
-use log::{debug, LevelFilter};
+use log::{debug, info, LevelFilter};
 use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
 mod support;
 
 fn render_to_native_window(window: NativeWindow) {
-    debug!("{:?}", window);
+    dbg!(&window);
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
@@ -73,10 +80,7 @@ fn render_to_native_window(window: NativeWindow) {
     let gl_context = gl_context.make_current(&gl_window.surface).unwrap();
 
     let renderer = support::Renderer::new(&gl_display);
-    renderer.resize(
-        gl_window.window.width() as i32,
-        gl_window.window.height() as i32,
-    );
+    renderer.resize(gl_window.window.width(), gl_window.window.height());
 
     renderer.draw();
 
@@ -89,6 +93,30 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     _class: JClass,
 ) {
     android_logger::init_once(android_logger::Config::default().with_max_level(LevelFilter::Trace));
+
+    let file = unsafe {
+        let mut logpipe: [RawFd; 2] = Default::default();
+        libc::pipe(logpipe.as_mut_ptr());
+        libc::dup2(logpipe[1], libc::STDOUT_FILENO);
+        libc::dup2(logpipe[1], libc::STDERR_FILENO);
+        libc::close(logpipe[1]);
+
+        File::from_raw_fd(logpipe[0])
+    };
+    thread::spawn(move || {
+        let mut reader = BufReader::new(file);
+        let mut buffer = String::new();
+        loop {
+            buffer.clear();
+            if let Ok(len) = reader.read_line(&mut buffer) {
+                if len == 0 {
+                    break;
+                } else {
+                    info!(target: "RustStdoutStderr", "{}", buffer);
+                }
+            }
+        }
+    });
 }
 
 #[no_mangle]
