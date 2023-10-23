@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 android_logger = "0.13"
-glutin = "0.30"
+glutin = "0.31"
 jni = "0.21"
 libc = "0.2"
 log = "0.4"
