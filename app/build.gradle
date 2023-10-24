@@ -1,3 +1,6 @@
+import com.android.build.gradle.tasks.MergeSourceSetFolders
+import com.nishtahir.CargoBuildTask
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -5,14 +8,15 @@ plugins {
 }
 
 android {
-    ndkVersion '25.2.9519653' // Don't have the matching NDK for AGP installed: https://developer.android.com/studio/projects/install-ndk#default-ndk-per-agp
+    // Don't have the matching NDK for AGP installed: https://developer.android.com/studio/projects/install-ndk#default-ndk-per-agp
+    ndkVersion '26.1.10909125'
     namespace 'rust.androidnativesurface'
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         applicationId "rust.androidnativesurface"
-        minSdk 29
-        targetSdk 33
+        minSdk 28 // Should remain in sync with the ndk api-level-xx feature in Rust
+        targetSdk 34
         versionCode 1
         versionName "1.0"
     }
@@ -32,10 +36,6 @@ android {
     }
 }
 
-dependencies {
-    implementation 'androidx.core:core-ktx:1.9.0'
-}
-
 cargo {
     module = "../android_native_surface"
     libname = "android_native_surface"
@@ -43,9 +43,9 @@ cargo {
 }
 
 project.afterEvaluate {
-    tasks.withType(com.nishtahir.CargoBuildTask).forEach { buildTask ->
-        tasks.withType(com.android.build.gradle.tasks.MergeSourceSetFolders).configureEach {
-            it.inputs.dir(new File(new File(buildDir, "rustJniLibs"), buildTask.toolchain.folder))
+    tasks.withType(CargoBuildTask).forEach { buildTask ->
+        tasks.withType(MergeSourceSetFolders).configureEach {
+            it.inputs.dir(layout.buildDirectory.dir("rustJniLibs" + File.separatorChar + buildTask.toolchain.folder))
             it.dependsOn(buildTask)
         }
     }
