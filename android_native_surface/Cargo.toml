@@ -13,7 +13,7 @@ glutin = { version = "0.31", default-features = false, features = ["egl"] }
 jni = "0.21"
 log = "0.4"
 ndk = { version = "0.8", default-features = false, features = ["api-level-29", "rwh_05"] }
-raw-window-handle = "0.5"
+raw-window-handle = "0.6"
 rustix = { version = "0.38", default-features = false, features = ["std", "pipe", "stdio"] }
 
 [build-dependencies]
