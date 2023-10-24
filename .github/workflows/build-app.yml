@@ -1,0 +1,48 @@
+name: Build app
+
+on: [push, pull_request]
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Format
+        run: cargo fmt --all -- --check
+        working-directory: android_native_surface
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-linux-android
+
+      - name: Clippy
+        run: cargo clippy --all --all-targets --all-features --target aarch64-linux-android -- -Dwarnings
+        working-directory: android_native_surface
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-linux-android
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build debug app
+        run: gradle build
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: AndroidNativeSurface
+          path: app/build/outputs/apk/debug/app-debug.apk
