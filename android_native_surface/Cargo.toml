@@ -11,10 +11,10 @@ crate-type = ["cdylib"]
 android_logger = "0.13"
 glutin = "0.30"
 jni = "0.21"
-libc = "0.2"
 log = "0.4"
 ndk = { version = "0.7", features = ["api-level-28"] }
 raw-window-handle = "0.5"
+rustix = { version = "0.38", default-features = false, features = ["std", "pipe", "stdio"] }
 
 [build-dependencies]
 gl_generator = "0.14"

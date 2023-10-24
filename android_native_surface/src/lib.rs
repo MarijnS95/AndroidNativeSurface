@@ -1,7 +1,6 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader},
-    os::fd::{FromRawFd, RawFd},
+    io::{self, BufRead, BufReader},
     thread,
 };
 
@@ -94,26 +93,24 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
 ) {
     android_logger::init_once(android_logger::Config::default().with_max_level(LevelFilter::Trace));
 
-    let file = unsafe {
-        let mut logpipe: [RawFd; 2] = Default::default();
-        libc::pipe(logpipe.as_mut_ptr());
-        libc::dup2(logpipe[1], libc::STDOUT_FILENO);
-        libc::dup2(logpipe[1], libc::STDERR_FILENO);
-        libc::close(logpipe[1]);
+    let file = {
+        let (read, write) = rustix::pipe::pipe().unwrap();
+        rustix::stdio::dup2_stdout(&write).unwrap();
+        rustix::stdio::dup2_stderr(&write).unwrap();
 
-        File::from_raw_fd(logpipe[0])
+        File::from(read)
     };
-    thread::spawn(move || {
+
+    thread::spawn(move || -> io::Result<()> {
         let mut reader = BufReader::new(file);
         let mut buffer = String::new();
         loop {
             buffer.clear();
-            if let Ok(len) = reader.read_line(&mut buffer) {
-                if len == 0 {
-                    break;
-                } else {
-                    info!(target: "RustStdoutStderr", "{}", buffer);
-                }
+            let len = reader.read_line(&mut buffer)?;
+            if len == 0 {
+                break Ok(());
+            } else {
+                info!(target: "RustStdoutStderr", "{}", buffer);
             }
         }
     });
