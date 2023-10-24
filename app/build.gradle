@@ -42,8 +42,11 @@ cargo {
     targets = ["arm64"]
 }
 
-tasks.configureEach { task ->
-    if ((task.name == 'javaPreCompileDebug' || task.name == 'javaPreCompileRelease')) {
-        task.dependsOn 'cargoBuild'
+project.afterEvaluate {
+    tasks.withType(com.nishtahir.CargoBuildTask).forEach { buildTask ->
+        tasks.withType(com.android.build.gradle.tasks.MergeSourceSetFolders).configureEach {
+            it.inputs.dir(new File(new File(buildDir, "rustJniLibs"), buildTask.toolchain.folder))
+            it.dependsOn(buildTask)
+        }
     }
 }
