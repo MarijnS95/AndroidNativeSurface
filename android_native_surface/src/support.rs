@@ -9,10 +9,14 @@ use std::{
 };
 
 use glutin::{
-    config::{ColorBufferType, Config, ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder},
-    display::{Display, DisplayApiPreference},
+    api::egl::{
+        config::Config,
+        display::Display,
+        surface::{ColorSpace, EglSurfaceAttributes, Surface},
+    },
+    config::{ColorBufferType, ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder},
     prelude::*,
-    surface::{Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
+    surface::{SurfaceAttributesBuilder, WindowSurface},
 };
 use ndk::{hardware_buffer_format::HardwareBufferFormat, native_window::NativeWindow};
 use raw_window_handle::{HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
@@ -33,7 +37,8 @@ pub struct GlWindow {
 impl GlWindow {
     pub fn from_existing(display: &Display, window: NativeWindow, config: &Config) -> Self {
         let attrs = surface_attributes(&window);
-        let surface = unsafe { display.create_window_surface(config, &attrs).unwrap() };
+        let surface = unsafe { display.create_window_surface(config, &attrs) }.unwrap();
+        dbg!(surface.color_space());
         Self { window, surface }
     }
 }
@@ -103,21 +108,24 @@ pub fn config_template(
 }
 
 /// Create surface attributes for window surface.
-pub fn surface_attributes(window: &NativeWindow) -> SurfaceAttributes<WindowSurface> {
+pub fn surface_attributes(window: &NativeWindow) -> EglSurfaceAttributes<WindowSurface> {
     let raw_window_handle = window.raw_window_handle();
-    SurfaceAttributesBuilder::<WindowSurface>::new().build(
-        raw_window_handle,
-        NonZeroU32::new(window.width().try_into().unwrap()).unwrap(),
-        NonZeroU32::new(window.height().try_into().unwrap()).unwrap(),
-    )
+    EglSurfaceAttributes {
+        attributes: SurfaceAttributesBuilder::<WindowSurface>::new()
+            // .with_srgb(Some(true))
+            .build(
+                raw_window_handle,
+                NonZeroU32::new(window.width().try_into().unwrap()).unwrap(),
+                NonZeroU32::new(window.height().try_into().unwrap()).unwrap(),
+            ),
+        color_space: Some(ColorSpace::DisplayP3Linear),
+    }
 }
 
 /// Create the display.
 pub fn create_display(raw_display: RawDisplayHandle) -> Display {
-    let preference = DisplayApiPreference::Egl;
-
     // Create connection to underlying OpenGL client Api.
-    unsafe { Display::new(raw_display, preference).unwrap() }
+    unsafe { Display::new(raw_display).unwrap() }
 }
 
 pub struct Renderer {
