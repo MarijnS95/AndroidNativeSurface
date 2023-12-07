@@ -21,7 +21,7 @@ class MainActivity : Activity() {
         }
 
         private external fun init()
-        external fun renderToSurface(surface: Surface)
+        external fun renderToSurface(surface: Surface) // , colorSpace: int)
         external fun renderToSurfaceTexture(surfaceTexture: SurfaceTexture)
     }
 
@@ -68,17 +68,17 @@ class MainActivity : Activity() {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 println("SurfaceView created: ${holder.surface}")
 
-                SurfaceControl.Transaction()
-//        .setExtendedRangeBrightness(surfaceView.surfaceControl, 10.0f, 10.0f)
-                    .setDataSpace(surfaceView.surfaceControl, DataSpace.DATASPACE_DISPLAY_P3)
-                    .apply()
+//                SurfaceControl.Transaction()
+////        .setExtendedRangeBrightness(surfaceView.surfaceControl, 10.0f, 10.0f)
+//                    .setDataSpace(surfaceView.surfaceControl, DataSpace.DATASPACE_DISPLAY_P3)
+//                    .apply()
 
                 renderToSurface(holder.surface)
 
-                SurfaceControl.Transaction()
-//        .setExtendedRangeBrightness(surfaceView.surfaceControl, 10.0f, 10.0f)
-                    .setDataSpace(surfaceView.surfaceControl, DataSpace.DATASPACE_DISPLAY_P3)
-                    .apply()
+//                SurfaceControl.Transaction()
+////        .setExtendedRangeBrightness(surfaceView.surfaceControl, 10.0f, 10.0f)
+//                    .setDataSpace(surfaceView.surfaceControl, DataSpace.DATASPACE_DISPLAY_P3)
+//                    .apply()
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {

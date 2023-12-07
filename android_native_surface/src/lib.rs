@@ -5,7 +5,7 @@ use std::{
 };
 
 use glutin::{
-    config::ConfigTemplate,
+    api::egl::surface::ColorSpace,
     context::{ContextApi, ContextAttributesBuilder},
     prelude::*,
 };
@@ -19,8 +19,8 @@ use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHand
 
 mod support;
 
-fn render_to_native_window(window: NativeWindow) {
-    dbg!(&window);
+fn render_to_native_window(window: NativeWindow, color_space: ColorSpace) {
+    // dbg!(&window, color_space);
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
@@ -30,12 +30,12 @@ fn render_to_native_window(window: NativeWindow) {
     let gl_display = support::create_display(raw_display_handle);
 
     let template = support::config_template(raw_window_handle);
-    dbg!(unsafe {
-        gl_display
-            .find_configs(ConfigTemplate::default())
-            .unwrap()
-            .collect::<Vec<_>>()
-    });
+    // dbg!(unsafe {
+    //     gl_display
+    //         .find_configs(ConfigTemplate::default())
+    //         .unwrap()
+    //         .collect::<Vec<_>>()
+    // });
     let config = unsafe {
         gl_display
             .find_configs(template)
@@ -68,7 +68,7 @@ fn render_to_native_window(window: NativeWindow) {
         config.alpha_size()
     );
     // Create a wrapper for GL window and surface.
-    let gl_window = support::GlWindow::from_existing(&gl_display, window, &config);
+    let gl_window = support::GlWindow::from_existing(&gl_display, window, &config, color_space);
 
     // The context creation part. It can be created before surface and that's how
     // it's expected in multithreaded + multiwindow operation mode, since you
@@ -145,6 +145,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     env: JNIEnv,
     _class: JClass,
     surface: JObject,
+    // color_space_index: u32,
 ) {
     debug!("Java Surface: {:?}", surface);
 
@@ -152,7 +153,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
         unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.into_raw()) }
             .unwrap();
 
-    render_to_native_window(window)
+    render_to_native_window(window, ColorSpace::ScrgbLinear)
 }
 
 #[no_mangle]
@@ -170,5 +171,5 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
 
     let window = surface_texture.acquire_native_window().unwrap();
 
-    render_to_native_window(window)
+    render_to_native_window(window, ColorSpace::DisplayP3Linear)
 }
