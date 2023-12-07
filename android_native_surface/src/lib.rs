@@ -83,7 +83,16 @@ fn render_to_native_window(window: NativeWindow) {
 
     renderer.draw();
 
-    gl_window.surface.swap_buffers(&gl_context).unwrap();
+    gl_window
+        .surface
+        .swap_buffers(&gl_context)
+        .expect("Cannot swap buffers");
+
+    drop(renderer);
+
+    gl_context
+        .make_not_current()
+        .expect("Cannot uncurrent GL context");
 }
 
 #[no_mangle]
