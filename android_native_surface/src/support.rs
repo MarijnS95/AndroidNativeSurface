@@ -35,10 +35,16 @@ pub struct GlWindow {
 }
 
 impl GlWindow {
-    pub fn from_existing(display: &Display, window: NativeWindow, config: &Config) -> Self {
-        let attrs = surface_attributes(&window);
+    pub fn from_existing(
+        display: &Display,
+        window: NativeWindow,
+        config: &Config,
+        color_space: ColorSpace,
+    ) -> Self {
+        let attrs = surface_attributes(&window, color_space);
         let surface = unsafe { display.create_window_surface(config, &attrs) }.unwrap();
-        dbg!(surface.color_space());
+        assert_eq!(Some(color_space), surface.color_space());
+        // dbg!(surface.color_space());
         Self { window, surface }
     }
 }
@@ -108,7 +114,10 @@ pub fn config_template(
 }
 
 /// Create surface attributes for window surface.
-pub fn surface_attributes(window: &NativeWindow) -> EglSurfaceAttributes<WindowSurface> {
+pub fn surface_attributes(
+    window: &NativeWindow,
+    color_space: ColorSpace,
+) -> EglSurfaceAttributes<WindowSurface> {
     let raw_window_handle = window.raw_window_handle();
     EglSurfaceAttributes {
         attributes: SurfaceAttributesBuilder::<WindowSurface>::new()
@@ -118,7 +127,7 @@ pub fn surface_attributes(window: &NativeWindow) -> EglSurfaceAttributes<WindowS
                 NonZeroU32::new(window.width().try_into().unwrap()).unwrap(),
                 NonZeroU32::new(window.height().try_into().unwrap()).unwrap(),
             ),
-        color_space: Some(ColorSpace::DisplayP3Linear),
+        color_space: Some(color_space),
     }
 }
 
@@ -221,6 +230,7 @@ impl Renderer {
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
 
             self.gl.ClearColor(0.1, 0.1, 0.1, 0.9);
+            // self.gl.ClearColor(0.0, 0.0, 0.0, 1.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT);
             self.gl.DrawArrays(gl::TRIANGLES, 0, 3);
         }
