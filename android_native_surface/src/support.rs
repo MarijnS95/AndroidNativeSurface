@@ -44,6 +44,37 @@ impl GlWindow {
         let attrs = surface_attributes(&window, color_space);
         let surface = unsafe { display.create_window_surface(config, &attrs) }.unwrap();
         assert_eq!(Some(color_space), surface.color_space());
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT = 0x3341;
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT = 0x3342;
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT = 0x3343;
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT = 0x3344;
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT = 0x3345;
+        // let EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT = 0x3346;
+        // let EGL_SMPTE2086_WHITE_POINT_X_EXT = 0x3347;
+        // let EGL_SMPTE2086_WHITE_POINT_Y_EXT = 0x3348;
+        // let EGL_SMPTE2086_MAX_LUMINANCE_EXT = 0x3349;
+        // let EGL_SMPTE2086_MIN_LUMINANCE_EXT = 0x334A;
+        // unsafe {
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_WHITE_POINT_X_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_WHITE_POINT_Y_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_MAX_LUMINANCE_EXT));
+        //     dbg!(surface.raw_attribute(EGL_SMPTE2086_MIN_LUMINANCE_EXT));
+        // }
+
+        // let EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT = 0x3360;
+        // let EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT = 0x3361;
+
+        // unsafe {
+        //     dbg!(surface.raw_attribute(EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT));
+        //     dbg!(surface.raw_attribute(EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT));
+        // }
+
         // dbg!(surface.color_space());
         Self { window, surface }
     }
