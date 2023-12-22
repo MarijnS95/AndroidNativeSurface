@@ -97,7 +97,7 @@ pub fn config_template(
                 b_size: 0,
             })
             .with_alpha_size(0),
-        HardwareBufferFormat::Unknown(x) => todo!("{x:?}"),
+        x => todo!("{x:?}"),
     };
     builder.build()
 }
