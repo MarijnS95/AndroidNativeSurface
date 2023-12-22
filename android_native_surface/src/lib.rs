@@ -1,7 +1,9 @@
 use std::{
+    ffi::CStr,
     fs::File,
     io::{self, BufRead, BufReader},
     thread,
+    time::Instant,
 };
 
 use glutin::{
@@ -13,16 +15,65 @@ use jni::{
     JNIEnv,
 };
 use log::{debug, info, LevelFilter};
-use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
+use ndk::{
+    hardware_buffer::HardwareBufferUsage,
+    hardware_buffer_format::HardwareBufferFormat,
+    media::image_reader::{ImageFormat, ImageReader},
+    native_window::NativeWindow,
+    surface_control::{SurfaceControl, SurfaceTransaction},
+    surface_texture::SurfaceTexture,
+};
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
 mod support;
 
-fn render_to_native_window(window: NativeWindow) {
-    dbg!(&window);
+fn render_to_native_window(og_window: NativeWindow) {
+    dbg!(&og_window);
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
-    let format = dbg!(window.format());
+    let format = dbg!(og_window.format());
+
+    let sc = SurfaceControl::create_from_window(
+        &og_window,
+        CStr::from_bytes_with_nul(b"foo\0").unwrap(),
+    );
+    dbg!(&sc);
+    let Some(sc) = sc else {
+        return;
+    };
+
+    // let i = ImageReader::new(512, 512, ImageFormat::RGBA_8888, 4).unwrap();
+    // TODO: Clean up imageformat!
+    // acquireImageLocked: Output buffer format: 0x2b, ImageReader configured format: 0x1
+    // let ifmt = unsafe {
+    //     std::mem::transmute::<u32, ImageFormat>(HardwareBufferFormat::R10G10B10A2_UNORM.into())
+    // };
+    // This is the format that we force EGL to select... Why does EGL not filter it on the config that we give it?
+    let image_format = ImageFormat::RGBX_8888;
+    //  match format {
+    //     HardwareBufferFormat::R8G8B8A8_UNORM => ImageFormat::RGBA_8888,
+    //     HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
+    //     x => todo!("{x:?}"),
+    // };
+    let i = ImageReader::new_with_usage(
+        og_window.width(),
+        og_window.height(),
+        image_format,
+        // AImageReader_newWithUsage: format 43 is not supported with usage 0x300 by AImageReader
+        HardwareBufferUsage::GPU_FRAMEBUFFER | HardwareBufferUsage::GPU_SAMPLED_IMAGE,
+        // TODO: Might have to wait until https://android.googlesource.com/platform/frameworks/av/+/master/media/ndk/NdkImageReader.cpp#743 AImageReader_newWithDataSpace() lands
+        4,
+    )
+    .unwrap();
+    let window = i.window().unwrap();
+    // {
+    //     dbg!(SurfaceControl::create_from_window(
+    //         &window,
+    //         CStr::from_bytes_with_nul(b"foo\0").unwrap(),
+    //     ));
+    // }
+
+    // dbg!(&window, color_space);
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
@@ -90,18 +141,49 @@ fn render_to_native_window(window: NativeWindow) {
     let renderer = support::Renderer::new(&gl_display);
     renderer.resize(gl_window.window.width(), gl_window.window.height());
 
-    renderer.draw();
+    dbg!(i.acquire_next_image());
+    dbg!(unsafe { i.acquire_next_image_async() });
 
+    let draw = Instant::now();
+    renderer.draw();
+    dbg!(draw.elapsed());
+
+    let swap = Instant::now();
     gl_window
         .surface
         .swap_buffers(&gl_context)
         .expect("Cannot swap buffers");
+    dbg!(swap.elapsed());
 
+    // A buffer only becomes available after swapping
+    let mut t = SurfaceTransaction::new().unwrap();
+    // t.set_on_commit(Box::new(|stats| {
+    //     dbg!(stats);
+    // }));
+    t.set_on_complete(Box::new(|stats| {
+        dbg!(stats);
+    }));
+    // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
+    let acquire = Instant::now();
+    // let img = i.acquire_next_image().unwrap();
+    // let fence = None;
+    let (img, fence) = unsafe { i.acquire_next_image_async() }.unwrap();
+    dbg!(acquire.elapsed());
+    // let img = img.unwrap();
+    dbg!(&img);
+    dbg!(&fence);
+    t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
+    t.apply();
+
+    let drop_ = Instant::now();
     drop(renderer);
+    dbg!(drop_.elapsed());
 
+    let not_current = Instant::now();
     gl_context
         .make_not_current()
         .expect("Cannot uncurrent GL context");
+    dbg!(not_current.elapsed());
 }
 
 #[no_mangle]
