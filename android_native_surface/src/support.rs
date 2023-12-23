@@ -212,7 +212,8 @@ impl Renderer {
             self.gl.BindVertexArray(self.vao);
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
 
-            self.gl.ClearColor(0.1, 0.1, 0.1, 0.9);
+            // Keep it transparent
+            // self.gl.ClearColor(0.1, 0.1, 0.1, 0.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT);
             self.gl.DrawArrays(gl::TRIANGLES, 0, 3);
         }
