@@ -20,6 +20,8 @@ mod support;
 
 fn render_to_native_window(window: NativeWindow) {
     dbg!(&window);
+    dbg!(window.format());
+    dbg!(window.buffers_data_space());
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
