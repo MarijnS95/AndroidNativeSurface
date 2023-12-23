@@ -22,6 +22,37 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        println("Root SC ${window.rootSurfaceControl}")
+        println("VIEW ${window.decorView}")
+        window.takeSurface(object : SurfaceHolder.Callback2 {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                println("Root SC ${window.rootSurfaceControl}")
+//                println("VIEW ${window.decorView}")
+//                println("SurfaceView created: ${holder.surface}")
+//                holder.surface
+//                build = SurfaceControl.Builder().setParent()
+                renderToSurface(holder.surface)
+            }
+
+            override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
+                println("SurfaceView changed: ${holder.surface}")
+                renderToSurface(holder.surface)
+            }
+
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                //                    TODO("Not yet implemented")
+            }
+
+            override fun surfaceRedrawNeeded(holder: SurfaceHolder) {
+                println("Root SC ${window.rootSurfaceControl}")
+//                println("VIEW ${window.decorView}")
+//                println("SurfaceView needs redraw: ${holder.surface}")
+                renderToSurface(holder.surface)
+            }
+        })
+
+        return
         setContentView(R.layout.activity_main)
 
         val surfaceView: SurfaceView = findViewById(R.id.surface_view)
