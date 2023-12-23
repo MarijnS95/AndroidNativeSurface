@@ -16,9 +16,10 @@ use jni::{
 };
 use log::{debug, info, LevelFilter};
 use ndk::{
+    data_space::DataSpace,
     hardware_buffer::HardwareBufferUsage,
     hardware_buffer_format::HardwareBufferFormat,
-    media::image_reader::{ImageFormat, ImageReader},
+    media::image_reader::ImageReader,
     native_window::NativeWindow,
     surface_control::{SurfaceControl, SurfaceTransaction},
     surface_texture::SurfaceTexture,
@@ -31,7 +32,8 @@ fn render_to_native_window(og_window: NativeWindow) {
     dbg!(&og_window);
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
-    let format = dbg!(og_window.format());
+    dbg!(og_window.format());
+    let format = HardwareBufferFormat::R10G10B10A2_UNORM;
 
     let sc = SurfaceControl::create_from_window(
         &og_window,
@@ -42,38 +44,24 @@ fn render_to_native_window(og_window: NativeWindow) {
         return;
     };
 
-    // let i = ImageReader::new(512, 512, ImageFormat::RGBA_8888, 4).unwrap();
-    // TODO: Clean up imageformat!
-    // acquireImageLocked: Output buffer format: 0x2b, ImageReader configured format: 0x1
-    // let ifmt = unsafe {
-    //     std::mem::transmute::<u32, ImageFormat>(HardwareBufferFormat::R10G10B10A2_UNORM.into())
-    // };
-    // This is the format that we force EGL to select... Why does EGL not filter it on the config that we give it?
-    let image_format = ImageFormat::RGBX_8888;
-    //  match format {
-    //     HardwareBufferFormat::R8G8B8A8_UNORM => ImageFormat::RGBA_8888,
-    //     HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
-    //     x => todo!("{x:?}"),
-    // };
-    let i = ImageReader::new_with_usage(
+    // TODO: Might have to wait until https://android.googlesource.com/platform/frameworks/av/+/master/media/ndk/NdkImageReader.cpp#743 AImageReader_newWithDataSpace() lands
+    let i = ImageReader::new_with_data_space(
         og_window.width(),
         og_window.height(),
-        image_format,
-        // AImageReader_newWithUsage: format 43 is not supported with usage 0x300 by AImageReader
         HardwareBufferUsage::GPU_FRAMEBUFFER | HardwareBufferUsage::GPU_SAMPLED_IMAGE,
-        // TODO: Might have to wait until https://android.googlesource.com/platform/frameworks/av/+/master/media/ndk/NdkImageReader.cpp#743 AImageReader_newWithDataSpace() lands
+        // This is the format that we force EGL to select... Why does EGL not filter it on the config that we give it?
         4,
+        format,
+        DataSpace::Unknown,
     )
     .unwrap();
     let window = i.window().unwrap();
-    // {
-    //     dbg!(SurfaceControl::create_from_window(
-    //         &window,
-    //         CStr::from_bytes_with_nul(b"foo\0").unwrap(),
-    //     ));
-    // }
-
-    // dbg!(&window, color_space);
+    {
+        dbg!(SurfaceControl::create_from_window(
+            &window,
+            CStr::from_bytes_with_nul(b"foo\0").unwrap(),
+        ));
+    }
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
@@ -82,6 +70,8 @@ fn render_to_native_window(og_window: NativeWindow) {
 
     let gl_display = support::create_display(raw_display_handle);
 
+    // Give the format to EGL otherwise it will return all configs, including formats that are not
+    // supported by the fixed format of this ImageReader.
     let template = support::config_template(raw_window_handle, format);
     let config = unsafe {
         gl_display
