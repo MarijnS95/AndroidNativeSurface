@@ -9,12 +9,12 @@ use std::{
 };
 
 use glutin::{
-    config::{Config, ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder},
+    config::{ColorBufferType, Config, ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder},
     display::{Display, DisplayApiPreference},
     prelude::*,
     surface::{Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
 };
-use ndk::native_window::NativeWindow;
+use ndk::{hardware_buffer_format::HardwareBufferFormat, native_window::NativeWindow};
 use raw_window_handle::{HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 
 pub mod gl {
@@ -38,13 +38,67 @@ impl GlWindow {
     }
 }
 
-/// Create template to find OpenGL config.
-pub fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
+/// Create template to find OpenGL config, which is compatible with the given Android [`HardwareBufferFormat`]
+pub fn config_template(
+    raw_window_handle: RawWindowHandle,
+    format: HardwareBufferFormat,
+) -> ConfigTemplate {
+    // The default is RGBA8
     let builder = ConfigTemplateBuilder::new()
-        .with_alpha_size(8)
         .compatible_with_native_window(raw_window_handle)
         .with_surface_type(ConfigSurfaceTypes::WINDOW);
 
+    let builder = match format {
+        HardwareBufferFormat::R8G8B8A8_UNORM => builder,
+        HardwareBufferFormat::R8G8B8X8_UNORM => builder,
+        // TODO: 0 seems to behave like DONT_CARE (-1)
+        HardwareBufferFormat::R8G8B8_UNORM => builder.with_alpha_size(0),
+        HardwareBufferFormat::R5G6B5_UNORM => builder
+            .with_buffer_type(ColorBufferType::Rgb {
+                // TODO: EGL enumerates all config formates even if 565 is requested.
+                // You will have to filder on this when enumerating configs.
+                r_size: 5,
+                g_size: 6,
+                b_size: 5,
+            })
+            .with_alpha_size(0),
+        HardwareBufferFormat::R16G16B16A16_FLOAT => builder
+            .with_buffer_type(ColorBufferType::Rgb {
+                r_size: 16,
+                g_size: 16,
+                b_size: 16,
+            })
+            .with_alpha_size(16)
+            .with_float_pixels(true),
+        HardwareBufferFormat::R10G10B10A2_UNORM => builder
+            .with_buffer_type(ColorBufferType::Rgb {
+                r_size: 10,
+                g_size: 10,
+                b_size: 10,
+            })
+            .with_alpha_size(2),
+        HardwareBufferFormat::BLOB => todo!(),
+        // TODO: Unset RGBA for all depth/stencil formats
+        HardwareBufferFormat::D16_UNORM => builder.with_depth_size(16),
+        HardwareBufferFormat::D24_UNORM => builder.with_depth_size(24),
+        HardwareBufferFormat::D24_UNORM_S8_UINT => builder.with_depth_size(24).with_stencil_size(8),
+        HardwareBufferFormat::D32_FLOAT => builder.with_depth_size(32).with_float_pixels(true),
+        HardwareBufferFormat::D32_FLOAT_S8_UINT => builder
+            .with_depth_size(32)
+            .with_stencil_size(8)
+            .with_float_pixels(true),
+        HardwareBufferFormat::S8_UINT => builder.with_stencil_size(8),
+        HardwareBufferFormat::Y8Cb8Cr8_420 => todo!(),
+        HardwareBufferFormat::YCbCr_P010 => todo!(),
+        HardwareBufferFormat::R8_UNORM => builder
+            .with_buffer_type(ColorBufferType::Rgb {
+                r_size: 8,
+                g_size: 0,
+                b_size: 0,
+            })
+            .with_alpha_size(0),
+        HardwareBufferFormat::Unknown(x) => todo!("{x:?}"),
+    };
     builder.build()
 }
 

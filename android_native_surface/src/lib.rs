@@ -20,6 +20,9 @@ mod support;
 
 fn render_to_native_window(window: NativeWindow) {
     dbg!(&window);
+    // TODO: EGL can update the format of the window by choosing a different format,
+    // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
+    let format = dbg!(window.format());
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
@@ -28,7 +31,7 @@ fn render_to_native_window(window: NativeWindow) {
 
     let gl_display = support::create_display(raw_display_handle);
 
-    let template = support::config_template(raw_window_handle);
+    let template = support::config_template(raw_window_handle, format);
     let config = unsafe {
         gl_display
             .find_configs(template)
@@ -51,7 +54,13 @@ fn render_to_native_window(window: NativeWindow) {
             .unwrap()
     };
 
-    println!("Picked a config with {} samples", config.num_samples());
+    println!(
+        "Picked a config with {} samples, {:?}, alpha: {}",
+        config.num_samples(),
+        config.color_buffer_type(),
+        config.alpha_size()
+    );
+
     // Create a wrapper for GL window and surface.
     let gl_window = support::GlWindow::from_existing(&gl_display, window, &config);
 
