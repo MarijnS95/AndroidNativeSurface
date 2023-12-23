@@ -20,7 +20,7 @@ use ndk::{
     hardware_buffer::HardwareBufferUsage,
     hardware_buffer_format::HardwareBufferFormat,
     media::image_reader::ImageReader,
-    native_window::NativeWindow,
+    native_window::{NativeWindow, NativeWindowTransform},
     surface_control::{SurfaceControl, SurfaceTransaction},
     surface_texture::SurfaceTexture,
 };
@@ -29,6 +29,10 @@ use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHand
 mod support;
 
 fn render_to_native_window(og_window: NativeWindow) {
+    dbg!(SurfaceControl::create_from_window(
+        &og_window,
+        CStr::from_bytes_with_nul(b"OG\0").unwrap(),
+    ));
     dbg!(&og_window);
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
@@ -131,8 +135,8 @@ fn render_to_native_window(og_window: NativeWindow) {
     let renderer = support::Renderer::new(&gl_display);
     renderer.resize(gl_window.window.width(), gl_window.window.height());
 
-    dbg!(i.acquire_next_image());
-    dbg!(unsafe { i.acquire_next_image_async() });
+    // dbg!(i.acquire_next_image());
+    // dbg!(unsafe { i.acquire_next_image_async() });
 
     let draw = Instant::now();
     renderer.draw();
@@ -162,7 +166,30 @@ fn render_to_native_window(og_window: NativeWindow) {
     // let img = img.unwrap();
     dbg!(&img);
     dbg!(&fence);
-    t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
+    // t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
+    let hw = img.hardware_buffer().unwrap();
+    t.set_buffer(&sc, &hw, fence);
+    for i in 0..5 {
+        let nested =
+            SurfaceControl::create(&sc, CStr::from_bytes_with_nul(b"nested\0").unwrap()).unwrap();
+        t.set_buffer(&nested, &hw, None);
+        let left = og_window.width() / 5 * i;
+        let top = i * 100;
+        t.set_position(&nested, left, top);
+        t.set_scale(
+            &nested,
+            512.0 / (og_window.width() as f32),
+            512.0 / (og_window.height() as f32),
+        );
+        t.set_buffer_transform(&nested, NativeWindowTransform::ROTATE_270);
+        t.set_buffer_alpha(&nested, i as f32 / 10.0 + 0.5);
+        // t.set_visibility(&nested, ndk::surface_control::Visibility::Show);
+    }
+    // if let Some(fence) = fence {
+    //     img.delete_async(fence);
+    // } else {
+    //     drop(img);
+    // }
     t.apply();
 
     let drop_ = Instant::now();
