@@ -1,4 +1,5 @@
 use std::{
+    ffi::CStr,
     fs::File,
     io::{self, BufRead, BufReader},
     thread,
@@ -13,12 +14,16 @@ use jni::{
     JNIEnv,
 };
 use log::{debug, info, LevelFilter};
-use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
+use ndk::{
+    native_window::NativeWindow,
+    surface_control::{SurfaceControl, SurfaceTransaction},
+    surface_texture::SurfaceTexture,
+};
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
 
 mod support;
 
-fn render_to_native_window(window: NativeWindow) {
+fn render_to_native_window(window: NativeWindow, control: SurfaceControl) {
     dbg!(&window);
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
@@ -139,6 +144,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     env: JNIEnv,
     _class: JClass,
     surface: JObject,
+    control: JObject,
 ) {
     debug!("Java Surface: {:?}", surface);
 
@@ -146,7 +152,20 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
         unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.into_raw()) }
             .unwrap();
 
-    render_to_native_window(window)
+    let wsc = dbg!(SurfaceControl::create_from_window(&window, unsafe {
+        CStr::from_bytes_with_nul_unchecked(b"from Rust\0")
+    }))
+    .unwrap();
+
+    let control =
+        unsafe { SurfaceControl::from_java(env.get_native_interface(), control.into_raw()) };
+
+    let t = SurfaceTransaction::new().unwrap();
+    // t.reparent(&wsc, Some(&control));
+    t.reparent(&control, Some(&wsc));
+    t.apply();
+
+    render_to_native_window(window, control)
 }
 
 #[no_mangle]
@@ -164,5 +183,5 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
 
     let window = surface_texture.acquire_native_window().unwrap();
 
-    render_to_native_window(window)
+    // render_to_native_window(window)
 }
