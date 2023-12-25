@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId "rust.androidnativesurface"
-        minSdk 28 // Should remain in sync with the ndk api-level-xx feature in Rust
+        minSdk 34 // Should remain in sync with the ndk api-level-xx feature in Rust
         targetSdk 34
         versionCode 1
         versionName "1.0"

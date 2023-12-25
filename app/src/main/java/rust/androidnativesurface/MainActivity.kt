@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.view.Surface
+import android.view.SurfaceControl
+import android.view.SurfaceControlViewHost
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
@@ -16,7 +18,7 @@ class MainActivity : Activity() {
         }
 
         private external fun init()
-        external fun renderToSurface(surface: Surface)
+        external fun renderToSurface(surface: Surface, control: SurfaceControl)
         external fun renderToSurfaceTexture(surfaceTexture: SurfaceTexture)
     }
 
@@ -25,19 +27,24 @@ class MainActivity : Activity() {
 
         println("Root SC ${window.rootSurfaceControl}")
         println("VIEW ${window.decorView}")
+        val control = SurfaceControl.Builder()
+        control.setHidden(false)
+        control.setName("Foobarbaz")
         window.takeSurface(object : SurfaceHolder.Callback2 {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 println("Root SC ${window.rootSurfaceControl}")
 //                println("VIEW ${window.decorView}")
 //                println("SurfaceView created: ${holder.surface}")
-//                holder.surface
-//                build = SurfaceControl.Builder().setParent()
-                renderToSurface(holder.surface)
+//                TODO: No constructor for a parent Surface, only a SurfaceControl
+//                control.setParent(holder.surface)
+                val sc = control.build()
+                val surface = Surface(sc)
+                renderToSurface(surface, sc)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
                 println("SurfaceView changed: ${holder.surface}")
-                renderToSurface(holder.surface)
+//                renderToSurface(holder.surface)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -48,7 +55,7 @@ class MainActivity : Activity() {
                 println("Root SC ${window.rootSurfaceControl}")
 //                println("VIEW ${window.decorView}")
 //                println("SurfaceView needs redraw: ${holder.surface}")
-                renderToSurface(holder.surface)
+//                renderToSurface(holder.surface)
             }
         })
 
@@ -60,12 +67,12 @@ class MainActivity : Activity() {
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 println("SurfaceView created: ${holder.surface}")
-                renderToSurface(holder.surface)
+//                renderToSurface(holder.surface)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
                 println("SurfaceView changed: ${holder.surface}")
-                renderToSurface(holder.surface)
+//                renderToSurface(holder.surface)
             }
 
             override fun surfaceDestroyed(p0: SurfaceHolder) {
@@ -83,7 +90,7 @@ class MainActivity : Activity() {
             ) {
                 Surface(surfaceTexture).let { surface ->
                     println("Java TextureView created: $surfaceTexture, $surface")
-                    renderToSurface(surface)
+//                    renderToSurface(surface)
                 }
             }
 
@@ -94,7 +101,7 @@ class MainActivity : Activity() {
             ) {
                 Surface(surfaceTexture).let { surface ->
                     println("Java TextureView resized: $surfaceTexture, $surface")
-                    renderToSurface(surface)
+//                    renderToSurface(surface)
                 }
             }
 
