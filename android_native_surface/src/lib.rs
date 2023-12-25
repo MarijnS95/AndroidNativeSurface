@@ -153,18 +153,16 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
             .unwrap();
     dbg!(&window);
 
-    let wsc = dbg!(SurfaceControl::create_from_window(&window, unsafe {
+    debug!("Control: {control:?}");
+    let control =
+        unsafe { SurfaceControl::from_java(env.get_native_interface(), control.into_raw()) };
+
+    dbg!(&control);
+
+    let wsc = dbg!(SurfaceControl::create(&control, unsafe {
         CStr::from_bytes_with_nul_unchecked(b"from Rust\0")
     }))
     .unwrap();
-
-    debug!("Control: {control:?}");
-    if control.is_null() {
-        return;
-    }
-    let control =
-        unsafe { SurfaceControl::from_java(env.get_native_interface(), control.into_raw()) };
-    dbg!(&control);
 
     let t = SurfaceTransaction::new().unwrap();
     // t.reparent(&wsc, Some(&control));
