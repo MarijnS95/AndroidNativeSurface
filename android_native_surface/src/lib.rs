@@ -1,14 +1,15 @@
 use std::{
-    ffi::CStr,
+    ffi::{CStr, CString},
     fs::File,
     io::{self, BufRead, BufReader},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use glutin::{
     context::{ContextApi, ContextAttributesBuilder},
     prelude::*,
+    surface::Rect,
 };
 use jni::{
     objects::{JClass, JObject},
@@ -156,6 +157,10 @@ fn render_to_native_window(og_window: NativeWindow) {
     // }));
     t.set_on_complete(Box::new(|stats| {
         dbg!(stats);
+        // TODO: Implement IntoIterator for non-borrowed type
+        for sc in &*stats.surface_controls() {
+            dbg!(sc);
+        }
     }));
     // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
     let acquire = Instant::now();
@@ -169,28 +174,66 @@ fn render_to_native_window(og_window: NativeWindow) {
     // t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
     let hw = img.hardware_buffer().unwrap();
     t.set_buffer(&sc, &hw, fence);
-    for i in 0..5 {
-        let nested =
-            SurfaceControl::create(&sc, CStr::from_bytes_with_nul(b"nested\0").unwrap()).unwrap();
-        t.set_buffer(&nested, &hw, None);
-        let left = og_window.width() / 5 * i;
-        let top = i * 100;
-        t.set_position(&nested, left, top);
-        t.set_scale(
-            &nested,
-            512.0 / (og_window.width() as f32),
-            512.0 / (og_window.height() as f32),
-        );
-        t.set_buffer_transform(&nested, NativeWindowTransform::ROTATE_270);
-        t.set_buffer_alpha(&nested, i as f32 / 10.0 + 0.5);
-        // t.set_visibility(&nested, ndk::surface_control::Visibility::Show);
+
+    let surfaces = (0..5)
+        .map(|x| {
+            SurfaceControl::create(&sc, &CString::new(format!("Nested {x}")).unwrap()).unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    for nested in &surfaces {
+        t.set_buffer(nested, &hw, None);
+        t.set_color(nested, 1.0, 1.0, 1.0, 1.0, DataSpace::Unknown);
     }
+    t.apply();
+
+    std::thread::spawn(move || {
+        for dt in 0..10_000 {
+            let crop = ndk::native_window::Rect {
+                // left: 0,
+                // top: 0,
+                // right: 512 - dt / 10,
+                // bottom: 512 - dt / 10,
+                // left: dt,
+                // top: dt,
+                // right: 10000,
+                // bottom: 10000,
+                // left,
+                // top,
+                // right: left + dt,
+                // bottom: top + dt,
+                left: 0,
+                top: 0,
+                right: og_window.width() - dt,
+                bottom: og_window.height() - dt,
+            };
+            for (i, nested) in surfaces.iter().enumerate() {
+                let i = i as i32;
+                let left = og_window.width() / 5 * i;
+                let top = i * 100;
+                if crop.right > crop.left && crop.bottom > crop.top {
+                    t.set_crop(nested, &crop);
+                }
+                t.set_position(nested, left, top);
+                t.set_scale(
+                    nested,
+                    512.0 / (og_window.width() as f32),
+                    512.0 / (og_window.height() as f32),
+                );
+                // t.set_buffer_transform(nested, NativeWindowTransform::ROTATE_270);
+                t.set_buffer_alpha(nested, i as f32 / 10.0 + 0.5);
+                // t.set_visibility(nested, ndk::surface_control::Visibility::Show);
+                t.apply();
+            }
+
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    });
     // if let Some(fence) = fence {
     //     img.delete_async(fence);
     // } else {
     //     drop(img);
     // }
-    t.apply();
 
     let drop_ = Instant::now();
     drop(renderer);
