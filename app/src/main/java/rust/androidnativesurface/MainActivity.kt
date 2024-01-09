@@ -34,7 +34,7 @@ class MainActivity : Activity() {
 
             override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
                 println("SurfaceView changed: ${holder.surface}")
-                renderToSurface(holder.surface)
+//                renderToSurface(holder.surface)
             }
 
             override fun surfaceDestroyed(p0: SurfaceHolder) {
