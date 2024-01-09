@@ -2,7 +2,9 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader},
+    sync::Arc,
     thread,
+    time::Duration,
 };
 
 use android_logger::FilterBuilder;
@@ -18,10 +20,12 @@ use jni::{
 };
 use log::{debug, info, LevelFilter};
 use ndk::{
-    hardware_buffer::HardwareBufferUsage,
+    choreographer::Choreographer,
+    hardware_buffer::{HardwareBufferUsage, Rect},
     hardware_buffer_format::HardwareBufferFormat,
+    looper::ThreadLooper,
     media::image_reader::{AcquireResult, ImageFormat, ImageReader},
-    native_window::NativeWindow,
+    native_window::{NativeWindow, NativeWindowTransform},
     surface_control::{SurfaceControl, SurfaceTransaction},
     surface_texture::SurfaceTexture,
     trace::Section,
@@ -258,9 +262,9 @@ impl NativeGL {
             // t.set_on_commit(Box::new(|stats| {
             //     dbg!(stats);
             // }));
-            t.set_on_complete(Box::new(|stats| {
-                dbg!(stats);
-            }));
+            // t.set_on_complete(Box::new(|stats| {
+            //     dbg!(stats);
+            // }));
             // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
             dbg!(&img);
             dbg!(&fence);
@@ -270,6 +274,109 @@ impl NativeGL {
                 fence,
             );
             t.apply();
+
+            let c = Choreographer::instance().unwrap();
+            // let mut latest = Arc::new(Mutex::new(None));
+            dbg!(&c);
+            // c.post_frame_callback(Box::new(|d| {
+            //     dbg!(d);
+            // }));
+            // let set_latest = latest.clone();
+            let mut bladiebla = 1;
+
+            let x = 1;
+            // : *const u32 = std::ptr::null();
+            let x = Arc::new(x);
+
+            let l = ThreadLooper::for_thread();
+            dbg!(&l);
+
+            dbg!(std::thread::current().id());
+            c.post_vsync_callback(Box::new(move |vsync: &'_ _| {
+                bladiebla += 1;
+                dbg!(std::thread::current().id());
+                // dbg!(std::backtrace::Backtrace::force_capture());
+                dbg!(bladiebla);
+                dbg!(unsafe { *x });
+                // dbg!(vsync);
+                // let mut g = set_latest.lock().unwrap();
+                // let len = vsync.frame_timelines_length();
+                // *g = Some((
+                //     vsync.frame_timeline_vsync_id(len - 1),
+                //     vsync.frame_timeline_expected_presentation_time(len - 1),
+                // ));
+            }));
+            let _live = c.register_refresh_rate_callback(Box::new(|refresh_rate| {
+                dbg!(std::thread::current().id());
+                dbg!(refresh_rate);
+            }));
+            std::mem::forget(_live);
+
+            dbg!(bladiebla);
+
+            let og_window = window.original_window.clone();
+            let sc = window.surface_control.clone();
+
+            std::thread::spawn(move || {
+                dbg!(std::thread::current().id());
+
+                // dbg!(ThreadLooper::for_thread());
+                // dbg!(Choreographer::instance());
+                // // let l = ThreadLooper::prepare();
+                // // let c = Choreographer::instance().unwrap();
+                // dbg!(&c);
+                // c.post_frame_callback(Box::new(|c| {
+                //     dbg!(c);
+                //     dbg!(std::thread::current().id());
+                // }));
+                // std::mem::forget(c.register_refresh_rate_callback(Box::new(|x| {
+                //     dbg!(x);
+                //     dbg!(std::thread::current().id());
+                // })));
+
+                // loop {
+                //     let x = l.poll_once().unwrap();
+                //     if matches!(x, ndk::looper::Poll::Callback) {
+                //         dbg!(&x);
+                //     }
+                //     // l.poll_all();
+                //     // std::thread::sleep(Duration::from_millis(100));
+                // }
+
+                std::thread::sleep(Duration::from_millis(100));
+                for i in 0..20 {
+                    t.set_on_complete(Box::new(|stats| {
+                        // dbg!(std::thread::current().id());
+                        // dbg!(stats);
+                    }));
+                    // if let Some((vsync_id, latest)) = latest.lock().unwrap().as_ref() {
+                    //     dbg!(vsync_id, latest);
+                    //     t.set_frame_timeline(*vsync_id + 100 * i);
+                    //     t.set_desired_present_time(*latest + i as u32 * Duration::from_millis(100));
+                    // }
+                    // t.set_on_commit(Box::new(|stats| {
+                    //     dbg!(stats);
+                    // }));
+                    t.set_geometry(
+                        &sc,
+                        &Rect {
+                            left: 0,
+                            top: 0,
+                            right: og_window.width(),
+                            bottom: og_window.height(),
+                        },
+                        &Rect {
+                            left: i as i32 * 10,
+                            top: 0,
+                            right: og_window.width() / 2,
+                            bottom: og_window.height(),
+                        },
+                        NativeWindowTransform::empty(),
+                    );
+                    t.apply();
+                }
+                drop(t);
+            });
         }
 
         {
