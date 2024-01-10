@@ -14,7 +14,7 @@ use jni::{
     objects::{JClass, JObject},
     JNIEnv,
 };
-use log::{debug, info, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use ndk::{
     hardware_buffer::HardwareBufferUsage,
     hardware_buffer_format::HardwareBufferFormat,
@@ -55,7 +55,7 @@ fn render_to_native_window(og_window: NativeWindow) {
     //     HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
     //     x => todo!("{x:?}"),
     // };
-    let i = ImageReader::new_with_usage(
+    let mut i = ImageReader::new_with_usage(
         og_window.width(),
         og_window.height(),
         image_format,
@@ -64,6 +64,19 @@ fn render_to_native_window(og_window: NativeWindow) {
         // TODO: Might have to wait until https://android.googlesource.com/platform/frameworks/av/+/master/media/ndk/NdkImageReader.cpp#743 AImageReader_newWithDataSpace() lands
         4,
     )
+    .unwrap();
+    dbg!(std::thread::current().id());
+    i.set_image_listener(Box::new(|ir| {
+        error!("Image ready on thread {:#?}", std::thread::current().id());
+    }))
+    .unwrap();
+    i.set_buffer_removed_listener(Box::new(|ir, buf| {
+        error!(
+            "Buffer removed on thread {:#?}",
+            std::thread::current().id()
+        );
+        dbg!(ir, &buf);
+    }))
     .unwrap();
     let window = i.window().unwrap();
     // {
@@ -141,39 +154,74 @@ fn render_to_native_window(og_window: NativeWindow) {
     let renderer = support::Renderer::new(&gl_display);
     renderer.resize(gl_window.window.width(), gl_window.window.height());
 
-    dbg!(i.acquire_next_image());
-    dbg!(unsafe { i.acquire_next_image_async() });
-
-    let draw = Instant::now();
-    renderer.draw();
-    dbg!(draw.elapsed());
-
-    let swap = Instant::now();
-    gl_window
-        .surface
-        .swap_buffers(&gl_context)
-        .expect("Cannot swap buffers");
-    dbg!(swap.elapsed());
-
-    // A buffer only becomes available after swapping
     let mut t = SurfaceTransaction::new().unwrap();
-    // t.set_on_commit(Box::new(|stats| {
-    //     dbg!(stats);
-    // }));
-    t.set_on_complete(Box::new(|stats| {
-        dbg!(stats);
-    }));
-    // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
-    let acquire = Instant::now();
-    // let img = i.acquire_next_image().unwrap();
-    // let fence = None;
-    let (img, fence) = unsafe { i.acquire_next_image_async() }.unwrap();
-    dbg!(acquire.elapsed());
-    // let img = img.unwrap();
-    dbg!(&img);
-    dbg!(&fence);
-    t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
-    t.apply();
+    let mut i = Some(i);
+    for inum in 0..10 {
+        // dbg!(i.acquire_next_image());
+        // dbg!(unsafe { i.acquire_next_image_async() });
+
+        let draw = Instant::now();
+        renderer.draw();
+        dbg!(draw.elapsed());
+
+        let swap = Instant::now();
+        gl_window.surface.swap_buffers(&gl_context);
+        // .expect("Cannot swap buffers");
+        dbg!(swap.elapsed());
+
+        // A buffer only becomes available after swapping
+        // t.set_on_commit(Box::new(|stats| {
+        //     dbg!(stats);
+        // }));
+        // t.set_on_complete(Box::new(|stats| {
+        //     dbg!(stats);
+        // }));
+        // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
+        let acquire = Instant::now();
+        // let img = i.acquire_next_image().unwrap();
+        // let fence = None;
+        let mut i = i.as_mut().unwrap();
+        let (img, fence) = unsafe { i.acquire_next_image_async() }.unwrap();
+        let hwbuf = img.hardware_buffer().unwrap();
+        let hwbuf = dbg!(hwbuf.acquire());
+        t.set_buffer(&sc, &hwbuf, fence);
+        t.apply();
+        if inum < 5 {
+            // dbg!(acquire.elapsed());
+            // let img = img.unwrap();
+            // dbg!(&img);
+            // dbg!(&fence);
+
+            // std::mem::forget(hwbuf.acquire());
+
+            // TODO: Is the hardware buffer ownership transferred? Otherwise we can only do this with the release fence from the transaction!
+            // if let Some(fence) = fence {
+            //     img.delete_async(fence);
+            // } else {
+            // drop(img);
+            // }
+        } else {
+            error!("Reset call");
+            // i.take();
+            i.set_image_listener(Box::new(move |ir| {
+                error!(
+                    "NEWFUNC {inum} Image ready on thread {:#?}",
+                    std::thread::current().id()
+                );
+                // assert!(inum < 10);
+            }))
+            .unwrap();
+            i.set_buffer_removed_listener(Box::new(move |ir, buf| {
+                error!(
+                    "NEWFUNC {inum} Buffer removed on thread {:#?}",
+                    std::thread::current().id()
+                );
+                dbg!(ir, &buf);
+                // assert!(inum < 10);
+            }))
+            .unwrap();
+        }
+    }
 
     let drop_ = Instant::now();
     drop(renderer);
@@ -184,6 +232,10 @@ fn render_to_native_window(og_window: NativeWindow) {
         .make_not_current()
         .expect("Cannot uncurrent GL context");
     dbg!(not_current.elapsed());
+    // drop(i);
+    // drop(window);
+    drop(gl_window);
+    error!("DROPPED IMAGEREADER!");
 }
 
 #[no_mangle]
