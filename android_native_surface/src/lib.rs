@@ -38,7 +38,8 @@ fn render_to_native_window(og_window: NativeWindow) {
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
     dbg!(og_window.format());
-    let format = HardwareBufferFormat::R10G10B10A2_UNORM;
+    // let format = HardwareBufferFormat::R10G10B10A2_UNORM;
+    let format = HardwareBufferFormat::R8G8B8A8_UNORM;
 
     let sc = SurfaceControl::create_from_window(
         &og_window,
@@ -57,7 +58,7 @@ fn render_to_native_window(og_window: NativeWindow) {
         // This is the format that we force EGL to select... Why does EGL not filter it on the config that we give it?
         4,
         format,
-        DataSpace::Unknown,
+        DataSpace::Bt709,
     )
     .unwrap();
     let window = i.window().unwrap();
@@ -170,8 +171,8 @@ fn render_to_native_window(og_window: NativeWindow) {
     dbg!(acquire.elapsed());
     // let img = img.unwrap();
     dbg!(&img);
+    dbg!(img.data_space());
     dbg!(&fence);
-    // t.set_buffer(&sc, &img.hardware_buffer().unwrap(), fence);
     let hw = img.hardware_buffer().unwrap();
     t.set_buffer(&sc, &hw, fence);
 
@@ -183,7 +184,7 @@ fn render_to_native_window(og_window: NativeWindow) {
 
     for nested in &surfaces {
         t.set_buffer(nested, &hw, None);
-        t.set_color(nested, 1.0, 1.0, 1.0, 1.0, DataSpace::Unknown);
+        // t.set_color(nested, 1.0, 1.0, 1.0, 1.0, DataSpace::Unknown);
     }
     t.apply();
 
@@ -208,6 +209,8 @@ fn render_to_native_window(og_window: NativeWindow) {
                 bottom: og_window.height() - dt,
             };
             for (i, nested) in surfaces.iter().enumerate() {
+                // t.set_extended_range_brightness(nested, 1.0, dt as f32 / 1000f32);
+                t.set_extended_range_brightness(nested, 1.0, 2f32);
                 let i = i as i32;
                 let left = og_window.width() / 5 * i;
                 let top = i * 100;
