@@ -162,7 +162,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
 
     let t = SurfaceTransaction::new().unwrap();
     // t.reparent(&wsc, Some(&control));
-    t.reparent(&control, Some(&wsc));
+    // t.reparent(&control, Some(&wsc));
     t.apply();
 
     render_to_native_window(window, control)
