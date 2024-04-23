@@ -18,7 +18,7 @@ class MainActivity : Activity() {
         }
 
         private external fun init()
-        external fun renderToSurface(surface: Surface, control: SurfaceControl)
+        external fun renderToSurface(surface: Surface, control: SurfaceControl?)
         external fun renderToSurfaceTexture(surfaceTexture: SurfaceTexture)
     }
 
@@ -30,21 +30,34 @@ class MainActivity : Activity() {
         val control = SurfaceControl.Builder()
         control.setHidden(false)
         control.setName("Foobarbaz")
+//        control.setBufferSize(512, 512) // Only set by default with setParent, but we cannot parent to the root surface
+        val sc = control.build()
+        val surface = Surface(sc)
         window.takeSurface(object : SurfaceHolder.Callback2 {
             override fun surfaceCreated(holder: SurfaceHolder) {
+                println("Surface for holder created: ${holder.surface}")
+//                renderToSurface(holder.surface, null)
                 println("Root SC ${window.rootSurfaceControl}")
 //                println("VIEW ${window.decorView}")
-//                println("SurfaceView created: ${holder.surface}")
 //                TODO: No constructor for a parent Surface, only a SurfaceControl
 //                control.setParent(holder.surface)
-                val sc = control.build()
-                val surface = Surface(sc)
+                val t = window.rootSurfaceControl?.buildReparentTransaction(sc)!!
+                val frame = holder.surfaceFrame
+                t.setBufferSize(sc, frame.width(), frame.height())
+                println("t: $t")
+//                t.apply()
+                window.rootSurfaceControl?.applyTransactionOnDraw(t)
                 renderToSurface(surface, sc)
             }
 
-            override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
-                println("SurfaceView changed: ${holder.surface}")
-//                renderToSurface(holder.surface)
+            override fun surfaceChanged(
+                holder: SurfaceHolder,
+                format: Int,
+                width: Int,
+                height: Int
+            ) {
+                println("Surface changed: ${holder.surface}")
+//                renderToSurface(surface, sc)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -52,10 +65,15 @@ class MainActivity : Activity() {
             }
 
             override fun surfaceRedrawNeeded(holder: SurfaceHolder) {
-                println("Root SC ${window.rootSurfaceControl}")
 //                println("VIEW ${window.decorView}")
-//                println("SurfaceView needs redraw: ${holder.surface}")
+                println("Surface needs redraw: ${holder.surface}")
 //                renderToSurface(holder.surface)
+                val t = SurfaceControl.Transaction();
+                val frame = holder.surfaceFrame
+                t.setBufferSize(sc, frame.width(), frame.height())
+                t.apply()
+                renderToSurface(surface, sc)
+
             }
         })
 
