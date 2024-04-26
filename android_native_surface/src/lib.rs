@@ -18,9 +18,9 @@ use log::{debug, error, info, LevelFilter};
 use ndk::{
     hardware_buffer::HardwareBufferUsage,
     hardware_buffer_format::HardwareBufferFormat,
-    media::image_reader::{ImageFormat, ImageReader},
+    media::image_reader::{AcquireResult, ImageFormat, ImageReader},
     native_window::NativeWindow,
-    surface_control::{SurfaceControl, SurfaceTransaction},
+    // surface_control::{SurfaceControl, SurfaceTransaction},
     surface_texture::SurfaceTexture,
 };
 use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
@@ -33,14 +33,14 @@ fn render_to_native_window(og_window: NativeWindow) {
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
     let format = dbg!(og_window.format());
 
-    let sc = SurfaceControl::create_from_window(
-        &og_window,
-        CStr::from_bytes_with_nul(b"foo\0").unwrap(),
-    );
-    dbg!(&sc);
-    let Some(sc) = sc else {
-        return;
-    };
+    // let sc = SurfaceControl::create_from_window(
+    //     &og_window,
+    //     CStr::from_bytes_with_nul(b"foo\0").unwrap(),
+    // );
+    // dbg!(&sc);
+    // let Some(sc) = sc else {
+    //     return;
+    // };
 
     // let i = ImageReader::new(512, 512, ImageFormat::RGBA_8888, 4).unwrap();
     // TODO: Clean up imageformat!
@@ -49,7 +49,13 @@ fn render_to_native_window(og_window: NativeWindow) {
     //     std::mem::transmute::<u32, ImageFormat>(HardwareBufferFormat::R10G10B10A2_UNORM.into())
     // };
     // This is the format that we force EGL to select... Why does EGL not filter it on the config that we give it?
-    let image_format = ImageFormat::RGBX_8888;
+    let image_format = match format {
+        HardwareBufferFormat::R8G8B8A8_UNORM => ImageFormat::RGBA_8888,
+        HardwareBufferFormat::R8G8B8X8_UNORM => ImageFormat::RGBX_8888,
+        HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGBX_8888,
+        // HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
+        x => todo!("{x:?}"),
+    };
     //  match format {
     //     HardwareBufferFormat::R8G8B8A8_UNORM => ImageFormat::RGBA_8888,
     //     HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
@@ -154,74 +160,95 @@ fn render_to_native_window(og_window: NativeWindow) {
     let renderer = support::Renderer::new(&gl_display);
     renderer.resize(gl_window.window.width(), gl_window.window.height());
 
-    let mut t = SurfaceTransaction::new().unwrap();
-    let mut i = Some(i);
-    for inum in 0..10 {
-        // dbg!(i.acquire_next_image());
-        // dbg!(unsafe { i.acquire_next_image_async() });
+    renderer.draw();
 
-        let draw = Instant::now();
-        renderer.draw();
-        dbg!(draw.elapsed());
+    let img = i.acquire_next_image().unwrap();
+    assert!(matches!(
+        img,
+        ndk::media::image_reader::AcquireResult::NoBufferAvailable
+    ));
 
-        let swap = Instant::now();
-        gl_window.surface.swap_buffers(&gl_context);
-        // .expect("Cannot swap buffers");
-        dbg!(swap.elapsed());
+    gl_window.surface.swap_buffers(&gl_context);
+    // .expect("Cannot swap buffers");
 
-        // A buffer only becomes available after swapping
-        // t.set_on_commit(Box::new(|stats| {
-        //     dbg!(stats);
-        // }));
-        // t.set_on_complete(Box::new(|stats| {
-        //     dbg!(stats);
-        // }));
-        // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
-        let acquire = Instant::now();
-        // let img = i.acquire_next_image().unwrap();
-        // let fence = None;
-        let mut i = i.as_mut().unwrap();
-        let (img, fence) = unsafe { i.acquire_next_image_async() }.unwrap();
-        let hwbuf = img.hardware_buffer().unwrap();
-        let hwbuf = dbg!(hwbuf.acquire());
-        t.set_buffer(&sc, &hwbuf, fence);
-        t.apply();
-        if inum < 5 {
-            // dbg!(acquire.elapsed());
-            // let img = img.unwrap();
-            // dbg!(&img);
-            // dbg!(&fence);
+    let img = unsafe { i.acquire_next_image_async() }.unwrap();
+    let AcquireResult::Image((image, fence)) = img else {
+        unreachable!()
+    };
+    dbg!(image, fence);
+    // let img = i.acquire_next_image().unwrap();
+    // let AcquireResult::Image(image) = img else {
+    //     unreachable!()
+    // };
+    // dbg!(image);
+    // let mut t = SurfaceTransaction::new().unwrap();
+    // let mut i = Some(i);
+    // for inum in 0..10 {
+    //     // dbg!(i.acquire_next_image());
+    //     // dbg!(unsafe { i.acquire_next_image_async() });
 
-            // std::mem::forget(hwbuf.acquire());
+    //     let draw = Instant::now();
+    //     renderer.draw();
+    //     dbg!(draw.elapsed());
 
-            // TODO: Is the hardware buffer ownership transferred? Otherwise we can only do this with the release fence from the transaction!
-            // if let Some(fence) = fence {
-            //     img.delete_async(fence);
-            // } else {
-            // drop(img);
-            // }
-        } else {
-            error!("Reset call");
-            // i.take();
-            i.set_image_listener(Box::new(move |ir| {
-                error!(
-                    "NEWFUNC {inum} Image ready on thread {:#?}",
-                    std::thread::current().id()
-                );
-                // assert!(inum < 10);
-            }))
-            .unwrap();
-            i.set_buffer_removed_listener(Box::new(move |ir, buf| {
-                error!(
-                    "NEWFUNC {inum} Buffer removed on thread {:#?}",
-                    std::thread::current().id()
-                );
-                dbg!(ir, &buf);
-                // assert!(inum < 10);
-            }))
-            .unwrap();
-        }
-    }
+    //     let swap = Instant::now();
+    //     gl_window.surface.swap_buffers(&gl_context);
+    //     // .expect("Cannot swap buffers");
+    //     dbg!(swap.elapsed());
+
+    //     // A buffer only becomes available after swapping
+    //     // t.set_on_commit(Box::new(|stats| {
+    //     //     dbg!(stats);
+    //     // }));
+    //     // t.set_on_complete(Box::new(|stats| {
+    //     //     dbg!(stats);
+    //     // }));
+    //     // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
+    //     let acquire = Instant::now();
+    //     // let img = i.acquire_next_image().unwrap();
+    //     // let fence = None;
+    //     let mut i = i.as_mut().unwrap();
+    //     let (img, fence) = unsafe { i.acquire_next_image_async() }.unwrap();
+    //     let hwbuf = img.hardware_buffer().unwrap();
+    //     let hwbuf = dbg!(hwbuf.acquire());
+    //     t.set_buffer(&sc, &hwbuf, fence);
+    //     t.apply();
+    //     if inum < 5 {
+    //         // dbg!(acquire.elapsed());
+    //         // let img = img.unwrap();
+    //         // dbg!(&img);
+    //         // dbg!(&fence);
+
+    //         // std::mem::forget(hwbuf.acquire());
+
+    //         // TODO: Is the hardware buffer ownership transferred? Otherwise we can only do this with the release fence from the transaction!
+    //         // if let Some(fence) = fence {
+    //         //     img.delete_async(fence);
+    //         // } else {
+    //         // drop(img);
+    //         // }
+    //     } else {
+    //         error!("Reset call");
+    //         // i.take();
+    //         i.set_image_listener(Box::new(move |ir| {
+    //             error!(
+    //                 "NEWFUNC {inum} Image ready on thread {:#?}",
+    //                 std::thread::current().id()
+    //             );
+    //             // assert!(inum < 10);
+    //         }))
+    //         .unwrap();
+    //         i.set_buffer_removed_listener(Box::new(move |ir, buf| {
+    //             error!(
+    //                 "NEWFUNC {inum} Buffer removed on thread {:#?}",
+    //                 std::thread::current().id()
+    //             );
+    //             dbg!(ir, &buf);
+    //             // assert!(inum < 10);
+    //         }))
+    //         .unwrap();
+    //     }
+    // }
 
     let drop_ = Instant::now();
     drop(renderer);
