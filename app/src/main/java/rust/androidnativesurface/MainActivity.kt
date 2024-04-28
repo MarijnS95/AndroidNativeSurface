@@ -35,12 +35,13 @@ class MainActivity : Activity() {
         println("isHdr ${display.isHdr}")
         println("isWideColorGamut ${display.isWideColorGamut}")
         println("preferredWideGamutColorSpace ${display.preferredWideGamutColorSpace}")
-//        println("hdrSdrRatio ${display.hdrSdrRatio}")
-//        println("isHdrSdrRatioAvailable ${display.isHdrSdrRatioAvailable}")
+        println("hdrSdrRatio ${display.hdrSdrRatio}")
+        println("isHdrSdrRatioAvailable ${display.isHdrSdrRatioAvailable}")
         println("hdrCapabilities ${display.hdrCapabilities}")
         println("desiredMaxAverageLuminance ${display.hdrCapabilities.desiredMaxAverageLuminance}")
         println("desiredMinLuminance ${display.hdrCapabilities.desiredMinLuminance}")
         println("desiredMaxLuminance ${display.hdrCapabilities.desiredMaxLuminance}")
+
         display.hdrCapabilities.supportedHdrTypes.forEach {
             val name = if (it == HdrCapabilities.HDR_TYPE_DOLBY_VISION) {
                 "HDR_TYPE_DOLBY_VISION"
