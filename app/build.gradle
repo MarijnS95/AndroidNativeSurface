@@ -9,7 +9,7 @@ plugins {
 
 android {
     // Don't have the matching NDK for AGP installed: https://developer.android.com/studio/projects/install-ndk#default-ndk-per-agp
-    ndkVersion '26.1.10909125'
+    ndkVersion '26.3.11579264'
     namespace 'rust.androidnativesurface'
     compileSdk 34
 
