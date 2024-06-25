@@ -15,7 +15,7 @@ use glutin::{
     surface::{Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
 };
 use ndk::{hardware_buffer_format::HardwareBufferFormat, native_window::NativeWindow};
-use raw_window_handle::{HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{DisplayHandle, HasWindowHandle as _, WindowHandle};
 
 pub mod gl {
     #![allow(clippy::all)]
@@ -40,12 +40,12 @@ impl GlWindow {
 
 /// Create template to find OpenGL config, which is compatible with the given Android [`HardwareBufferFormat`]
 pub fn config_template(
-    raw_window_handle: RawWindowHandle,
+    window_handle: WindowHandle<'_>,
     format: HardwareBufferFormat,
 ) -> ConfigTemplate {
     // The default is RGBA8
     let builder = ConfigTemplateBuilder::new()
-        .compatible_with_native_window(raw_window_handle)
+        .compatible_with_native_window(window_handle.as_raw())
         .with_surface_type(ConfigSurfaceTypes::WINDOW);
 
     let builder = match format {
@@ -104,20 +104,20 @@ pub fn config_template(
 
 /// Create surface attributes for window surface.
 pub fn surface_attributes(window: &NativeWindow) -> SurfaceAttributes<WindowSurface> {
-    let raw_window_handle = window.raw_window_handle();
+    let window_handle = window.window_handle().unwrap();
     SurfaceAttributesBuilder::<WindowSurface>::new().build(
-        raw_window_handle,
+        window_handle.as_raw(),
         NonZeroU32::new(window.width().try_into().unwrap()).unwrap(),
         NonZeroU32::new(window.height().try_into().unwrap()).unwrap(),
     )
 }
 
 /// Create the display.
-pub fn create_display(raw_display: RawDisplayHandle) -> Display {
+pub fn create_display(display: DisplayHandle<'_>) -> Display {
     let preference = DisplayApiPreference::Egl;
 
     // Create connection to underlying OpenGL client Api.
-    unsafe { Display::new(raw_display, preference).unwrap() }
+    unsafe { Display::new(display.as_raw(), preference).unwrap() }
 }
 
 pub struct Renderer {

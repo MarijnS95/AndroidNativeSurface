@@ -8,12 +8,12 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-android_logger = "0.13"
-glutin = { version = "0.31", default-features = false, features = ["egl"] }
+android_logger = "0.14"
+glutin = { version = "0.32", default-features = false, features = ["egl"] }
 jni = "0.21"
 log = "0.4"
-ndk = { version = "0.9", default-features = false, features = ["api-level-28", "rwh_05"] }
-raw-window-handle = "0.5"
+ndk = { version = "0.9", default-features = false, features = ["api-level-28", "rwh_06"] }
+raw-window-handle = "0.6"
 rustix = { version = "0.38", default-features = false, features = ["std", "pipe", "stdio"] }
 
 [build-dependencies]

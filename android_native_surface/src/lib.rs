@@ -14,7 +14,7 @@ use jni::{
 };
 use log::{debug, info, LevelFilter};
 use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
-use raw_window_handle::{AndroidDisplayHandle, HasRawWindowHandle, RawDisplayHandle};
+use raw_window_handle::{DisplayHandle, HasWindowHandle as _};
 
 mod support;
 
@@ -26,12 +26,12 @@ fn render_to_native_window(window: NativeWindow) {
 
     // TODO: NDK should implement this!
     // let raw_display_handle = window.raw_display_handle();
-    let raw_display_handle = RawDisplayHandle::Android(AndroidDisplayHandle::empty());
-    let raw_window_handle = window.raw_window_handle();
+    let display_handle = DisplayHandle::android();
+    let window_handle = window.window_handle().unwrap();
 
-    let gl_display = support::create_display(raw_display_handle);
+    let gl_display = support::create_display(display_handle);
 
-    let template = support::config_template(raw_window_handle, format);
+    let template = support::config_template(window_handle, format);
     let config = unsafe {
         gl_display
             .find_configs(template)
@@ -63,17 +63,19 @@ fn render_to_native_window(window: NativeWindow) {
 
     // Create a wrapper for GL window and surface.
     let gl_window = support::GlWindow::from_existing(&gl_display, window, &config);
+    // Re-borrow the window handle
+    let window_handle = gl_window.window.window_handle().unwrap();
 
     // The context creation part. It can be created before surface and that's how
     // it's expected in multithreaded + multiwindow operation mode, since you
     // can send NotCurrentContext, but not Surface.
-    let context_attributes = ContextAttributesBuilder::new().build(Some(raw_window_handle));
+    let context_attributes = ContextAttributesBuilder::new().build(Some(window_handle.as_raw()));
 
     // Since glutin by default tries to create OpenGL core context, which may not be
     // present we should try gles.
     let fallback_context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::Gles(None))
-        .build(Some(raw_window_handle));
+        .build(Some(window_handle.as_raw()));
     let gl_context = unsafe {
         gl_display
             .create_context(&config, &context_attributes)
