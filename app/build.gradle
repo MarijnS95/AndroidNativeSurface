@@ -2,9 +2,9 @@ import com.android.build.gradle.tasks.MergeSourceSetFolders
 import com.nishtahir.CargoBuildTask
 
 plugins {
+    id 'org.mozilla.rust-android-gradle.rust-android'
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'org.mozilla.rust-android-gradle.rust-android'
 }
 
 android {
