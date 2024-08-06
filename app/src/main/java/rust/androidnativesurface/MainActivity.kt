@@ -17,12 +17,10 @@ class MainActivity : Activity() {
         }
 
         private external fun init()
-        external fun renderToSurface(gl: NativeGL, surface: Surface)
-        external fun renderToSurfaceTexture(gl: NativeGL, surfaceTexture: SurfaceTexture)
     }
 
     class NativeGL {
-        private val mNative: Long = 0
+        private val mNative: Long = 0 // TODO: var?
         private external fun init(self: NativeGL)
 
         init {
@@ -30,6 +28,129 @@ class MainActivity : Activity() {
         }
 
         // TODO: Add a destructor
+    }
+
+    open class NativeSurfaceWrapper(private val gl: NativeGL) {
+        private val mNative: Long = 0 // TODO: var?
+
+        private external fun setSurface(gl: NativeGL, self: NativeSurfaceWrapper, surface: Surface)
+        private external fun removeSurface(self: NativeSurfaceWrapper)
+        private external fun renderToSurface(gl: NativeGL, self: NativeSurfaceWrapper)
+
+        fun setSurface(surface: Surface) {
+            assert(mNative == 0L)
+            setSurface(gl, this, surface)
+            assert(mNative != 0L)
+        }
+
+        fun redraw() {
+            assert(mNative != 0L)
+            renderToSurface(gl, this)
+
+        }
+
+        fun removeSurface() {
+            assert(mNative != 0L)
+            removeSurface(this)
+            assert(mNative == 0L)
+        }
+    }
+
+    class SurfaceHolderWrapper(private val gl: NativeGL) : NativeSurfaceWrapper(gl),
+        SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            println("SurfaceView created: ${holder.surface}")
+            setSurface(holder.surface)
+        }
+
+        override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
+            println("SurfaceView changed: ${holder.surface}")
+            redraw()
+        }
+
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+            println("SurfaceView destroyed: ${holder.surface}")
+            removeSurface()
+        }
+    }
+
+    class SurfaceTextureWrapper(private val gl: NativeGL) : NativeSurfaceWrapper(gl),
+        TextureView.SurfaceTextureListener {
+
+        override fun onSurfaceTextureAvailable(
+            surfaceTexture: SurfaceTexture, p1: Int, p2: Int
+        ) {
+            Surface(surfaceTexture).let { surface ->
+                println("Java TextureView created: $surfaceTexture, $surface")
+                setSurface(surface)
+                // No "changed" callback that always fires, so we have to draw immediately
+                redraw()
+            }
+        }
+
+        override fun onSurfaceTextureSizeChanged(
+            surfaceTexture: SurfaceTexture, p1: Int, p2: Int
+        ) {
+            println("Java TextureView resized: $surfaceTexture")
+            redraw()
+        }
+
+        override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+            println("Java TextureView removed: $surfaceTexture")
+            removeSurface()
+            return true
+        }
+
+        override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
+            // Called after our app has swapped buffers to it
+            println("Java TextureView $surfaceTexture updated at ${surfaceTexture.timestamp}")
+        }
+    }
+
+    class NativeSurfaceTextureWrapper(private val gl: NativeGL) : NativeSurfaceWrapper(gl),
+        TextureView.SurfaceTextureListener {
+        private val mNative: Long = 0 // TODO: var?
+
+        private external fun setSurfaceTexture(
+            gl: NativeGL,
+            self: NativeSurfaceTextureWrapper,
+            surface: SurfaceTexture
+        )
+
+        private external fun removeSurfaceTexture(self: NativeSurfaceTextureWrapper)
+        private external fun renderToSurfaceTexture(gl: NativeGL, self: NativeSurfaceTextureWrapper)
+
+        override fun onSurfaceTextureAvailable(
+            surfaceTexture: SurfaceTexture, p1: Int, p2: Int
+        ) {
+            println("Rust TextureView created: $surfaceTexture")
+            assert(mNative == 0L)
+            setSurfaceTexture(gl, this, surfaceTexture)
+            assert(mNative != 0L)
+            // No "changed" callback that always fires, so we have to draw immediately
+            renderToSurfaceTexture(gl, this)
+        }
+
+        override fun onSurfaceTextureSizeChanged(
+            surfaceTexture: SurfaceTexture, p1: Int, p2: Int
+        ) {
+            println("Rust TextureView resized: $surfaceTexture")
+            assert(mNative != 0L)
+            renderToSurfaceTexture(gl, this)
+        }
+
+        override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+            println("Rust TextureView destroyed: $surfaceTexture")
+            assert(mNative != 0L)
+            removeSurfaceTexture(this)
+            assert(mNative == 0L)
+            return true
+        }
+
+        override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
+            // Called after our app has swapped buffers to it
+            println("Rust TextureView $surfaceTexture updated at ${surfaceTexture.timestamp}")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,86 +161,16 @@ class MainActivity : Activity() {
 
         val surfaceView: SurfaceView = findViewById(R.id.surface_view)
         println("SurfaceView: ${surfaceView.holder.surface}")
-        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                println("SurfaceView created: ${holder.surface}")
-                renderToSurface(gl, holder.surface)
-            }
-
-            override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
-                println("SurfaceView changed: ${holder.surface}")
-                renderToSurface(gl, holder.surface)
-            }
-
-            override fun surfaceDestroyed(p0: SurfaceHolder) {
-//                    TODO("Not yet implemented")
-            }
-        })
+        surfaceView.holder.addCallback(SurfaceHolderWrapper(gl))
 
         val javaTextureView: TextureView = findViewById(R.id.java_texture_view)
         println("Java TextureView: ${javaTextureView.surfaceTexture}")
-        javaTextureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(
-                surfaceTexture: SurfaceTexture,
-                p1: Int,
-                p2: Int
-            ) {
-                Surface(surfaceTexture).let { surface ->
-                    println("Java TextureView created: $surfaceTexture, $surface")
-                    renderToSurface(gl, surface)
-                }
-            }
+        // TODO: This breaks because the Surface() (producer-end) changes for the given SurfaceTexture() (consumer-end)
+        javaTextureView.surfaceTextureListener = SurfaceTextureWrapper(gl)
 
-            override fun onSurfaceTextureSizeChanged(
-                surfaceTexture: SurfaceTexture,
-                p1: Int,
-                p2: Int
-            ) {
-                Surface(surfaceTexture).let { surface ->
-                    println("Java TextureView resized: $surfaceTexture, $surface")
-                    renderToSurface(gl, surface)
-                }
-            }
-
-            override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
-//                TODO("Not yet implemented")
-                return true
-            }
-
-            override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
-//                TODO("Not yet implemented")
-            }
-        }
 
         val rustTextureView: TextureView = findViewById(R.id.rust_texture_view)
         println("Rust TextureView: ${rustTextureView.surfaceTexture}")
-        rustTextureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(
-                surfaceTexture: SurfaceTexture,
-                p1: Int,
-                p2: Int
-            ) {
-                println("Rust TextureView created: $surfaceTexture")
-                renderToSurfaceTexture(gl, surfaceTexture)
-            }
-
-            override fun onSurfaceTextureSizeChanged(
-                surfaceTexture: SurfaceTexture,
-                p1: Int,
-                p2: Int
-            ) {
-                println("Rust TextureView resized: $surfaceTexture")
-                renderToSurfaceTexture(gl, surfaceTexture)
-            }
-
-            override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
-//                TODO("Not yet implemented")
-                return true
-            }
-
-            override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
-//                TODO("Not yet implemented")
-            }
-        }
+        rustTextureView.surfaceTextureListener = NativeSurfaceTextureWrapper(gl)
     }
 }

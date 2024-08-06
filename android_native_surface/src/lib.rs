@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    ffi::c_void,
     fs::File,
     io::{self, BufRead, BufReader},
     thread,
@@ -32,12 +31,7 @@ struct NativeGL {
     gl_contexts: HashMap</*HardwareBufferFormat*/ i32, (Option<NotCurrentContext>, Config)>,
     /// Lazy-initialized when the first context+surface is made current
     renderer: Option<support::Renderer>,
-
-    surfaces: HashMap<*const c_void, support::GlWindow>,
 }
-
-// TODO: Remove when replacing surfaces with proper Rust handler
-unsafe impl Send for NativeGL {}
 
 impl NativeGL {
     fn new() -> Self {
@@ -106,11 +100,27 @@ impl NativeGL {
             gl_display,
             gl_contexts: std::iter::once((format.into(), (Some(gl_context), gl_config))).collect(),
             renderer: None,
-            surfaces: HashMap::new(),
         }
     }
 
-    fn render_to_window(&mut self, window: NativeWindow) {
+    fn create_gl_window(&mut self, window: NativeWindow) -> support::GlWindow {
+        debug!("Add window {window:?}");
+        let _t = Section::new("Gl::add_window()").unwrap();
+
+        // TODO: Query format from NativeWindow
+        // (even though the config implicitly overwrites it)
+        let format = HardwareBufferFormat::R8G8B8X8_UNORM;
+        let (_gl_context_rc, gl_config) = self
+            .gl_contexts
+            .get_mut(&format.into())
+            .expect("No context/config for format");
+
+        // Create a wrapper for GL window and surface.
+        support::GlWindow::from_existing(&self.gl_display, window, gl_config)
+    }
+
+    fn render_to_gl_window(&mut self, gl_window: &support::GlWindow) {
+        debug!("Render to window {gl_window:?}");
         let _t = Section::new("Gl::render_to_window()").unwrap();
 
         let (gl_context_rc, gl_context, gl_window, renderer) = {
@@ -119,19 +129,11 @@ impl NativeGL {
             // TODO: Lazy-init more configs!
             // let format = window.format();
             let format = HardwareBufferFormat::R8G8B8X8_UNORM;
-            let (gl_context_rc, gl_config) = self
+            let (gl_context_rc, _gl_config) = self
                 .gl_contexts
                 .get_mut(&format.into())
                 .expect("No context/config for format");
             let gl_context = gl_context_rc.take().expect("Didn't put back");
-
-            let gl_window = self
-                .surfaces
-                .entry(window.ptr().as_ptr().cast())
-                .or_insert_with(|| {
-                    // Create a wrapper for GL window and surface.
-                    support::GlWindow::from_existing(&self.gl_display, window, gl_config)
-                });
 
             // Make it current and load symbols.
             let gl_context = gl_context.make_current(&gl_window.surface).unwrap();
@@ -207,7 +209,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
             if len == 0 {
                 break Ok(());
             } else {
-                info!(target: "RustStdoutStderr", "{}", buffer);
+                info!(target: "RustStdoutStderr", "{buffer}");
             }
         }
     });
@@ -224,42 +226,126 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeGL
 }
 
 #[no_mangle]
-pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companion_renderToSurface(
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceWrapper_setSurface(
     mut env: JNIEnv,
     _class: JClass,
     native_gl: JObject,
+    native_surface_wrapper: JObject,
     surface: JObject,
 ) {
-    let _t = Section::new("renderToSurface").unwrap();
-    debug!("Java Surface: {:?}", surface);
+    let _t = Section::new("setSurface").unwrap();
+    debug!("Add Java Surface {surface:?} to {native_surface_wrapper:?}");
 
     let window =
         unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.into_raw()) }
             .unwrap();
-
     let mut native_gl =
         unsafe { env.get_rust_field::<_, _, NativeGL>(native_gl, "mNative") }.unwrap();
-    native_gl.render_to_window(window)
+    let gl_window = native_gl.create_gl_window(window);
+    drop(native_gl);
+    unsafe { env.set_rust_field(native_surface_wrapper, "mNative", gl_window) }.unwrap();
 }
 
 #[no_mangle]
-pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companion_renderToSurfaceTexture(
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceWrapper_removeSurface(
+    mut env: JNIEnv,
+    _class: JClass,
+    native_surface_wrapper: JObject,
+) {
+    let _t = Section::new("removeSurface").unwrap();
+    debug!("Remove Java Surface from {native_surface_wrapper:?}");
+
+    let gl_window: support::GlWindow =
+        unsafe { env.take_rust_field(native_surface_wrapper, "mNative") }.unwrap();
+
+    debug!("Removed surface was {gl_window:?}");
+}
+
+#[no_mangle]
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceWrapper_renderToSurface(
     mut env: JNIEnv,
     _class: JClass,
     native_gl: JObject,
+    native_surface_wrapper: JObject,
+) {
+    let _t = Section::new("renderToSurface").unwrap();
+    debug!("Render to Java Surface via {native_surface_wrapper:?}");
+
+    // SAFETY: TODO
+    let mut env2 = unsafe { env.unsafe_clone() };
+
+    let gl_window =
+        unsafe { env.get_rust_field::<_, _, support::GlWindow>(native_surface_wrapper, "mNative") }
+            .unwrap();
+    debug!("Java Surface is {gl_window:?}");
+
+    let mut native_gl =
+        unsafe { env2.get_rust_field::<_, _, NativeGL>(native_gl, "mNative") }.unwrap();
+
+    native_gl.render_to_gl_window(&gl_window)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceTextureWrapper_setSurfaceTexture(
+    mut env: JNIEnv,
+    _class: JClass,
+    native_gl: JObject,
+    native_surface_texture_wrapper: JObject,
     surface_texture: JObject,
 ) {
-    let _t = Section::new("renderToSurfaceTexture").unwrap();
-    debug!("Java SurfaceTexture: {:?}", surface_texture);
+    let _t = Section::new("setSurfaceTexture").unwrap();
+    debug!("Add Java SurfaceTexture {surface_texture:?} to {native_surface_texture_wrapper:?}");
 
+    // SAFETY: The handle is valid and we're not storing this SurfaceTexture anywhere.  The lifetime
+    // on the Java side is guiding (and a Surface/NativeWindow can exist independently from it).
     let surface_texture = unsafe {
         SurfaceTexture::from_surface_texture(env.get_native_interface(), surface_texture.into_raw())
             .unwrap()
     };
-
     let window = surface_texture.acquire_native_window().unwrap();
-
     let mut native_gl =
         unsafe { env.get_rust_field::<_, _, NativeGL>(native_gl, "mNative") }.unwrap();
-    native_gl.render_to_window(window)
+    let gl_window = native_gl.create_gl_window(window);
+    drop(native_gl);
+    unsafe { env.set_rust_field(native_surface_texture_wrapper, "mNative", gl_window) }.unwrap();
+}
+
+#[no_mangle]
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceTextureWrapper_removeSurfaceTexture(
+    mut env: JNIEnv,
+    _class: JClass,
+    native_surface_texture_wrapper: JObject,
+) {
+    let _t = Section::new("removeSurfaceTexture").unwrap();
+    debug!("Remove Java Surface from {native_surface_texture_wrapper:?}");
+
+    let gl_window: support::GlWindow =
+        unsafe { env.take_rust_field(native_surface_texture_wrapper, "mNative") }.unwrap();
+
+    debug!("Removed surface was {gl_window:?}");
+}
+
+#[no_mangle]
+pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSurfaceTextureWrapper_renderToSurfaceTexture(
+    mut env: JNIEnv,
+    _class: JClass,
+    native_gl: JObject,
+    native_surface_texture_wrapper: JObject,
+) {
+    let _t = Section::new("renderToSurfaceTexture").unwrap();
+    debug!("Render to Java Surface via {native_surface_texture_wrapper:?}");
+
+    // SAFETY: TODO
+    let mut env2 = unsafe { env.unsafe_clone() };
+
+    let gl_window = unsafe {
+        env.get_rust_field::<_, _, support::GlWindow>(native_surface_texture_wrapper, "mNative")
+    }
+    .unwrap();
+    debug!("Java Surface is {gl_window:?}");
+
+    let mut native_gl =
+        unsafe { env2.get_rust_field::<_, _, NativeGL>(native_gl, "mNative") }.unwrap();
+
+    native_gl.render_to_gl_window(&gl_window)
 }

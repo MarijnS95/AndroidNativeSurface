@@ -25,6 +25,7 @@ pub mod gl {
 }
 
 /// Structure to hold winit window and gl surface.
+#[derive(Debug)]
 pub struct GlWindow {
     pub surface: Surface<WindowSurface>,
     pub window: NativeWindow,
