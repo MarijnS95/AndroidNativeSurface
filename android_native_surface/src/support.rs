@@ -15,7 +15,7 @@ use glutin::{
     surface::{Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
 };
 use ndk::{hardware_buffer_format::HardwareBufferFormat, native_window::NativeWindow};
-use raw_window_handle::{DisplayHandle, HasWindowHandle as _, WindowHandle};
+use raw_window_handle::{DisplayHandle, HasWindowHandle as _};
 
 pub mod gl {
     #![allow(clippy::all)]
@@ -39,14 +39,9 @@ impl GlWindow {
 }
 
 /// Create template to find OpenGL config, which is compatible with the given Android [`HardwareBufferFormat`]
-pub fn config_template(
-    window_handle: WindowHandle<'_>,
-    format: HardwareBufferFormat,
-) -> ConfigTemplate {
+pub fn config_template(format: HardwareBufferFormat) -> ConfigTemplate {
     // The default is RGBA8
-    let builder = ConfigTemplateBuilder::new()
-        .compatible_with_native_window(window_handle.as_raw())
-        .with_surface_type(ConfigSurfaceTypes::WINDOW);
+    let builder = ConfigTemplateBuilder::new().with_surface_type(ConfigSurfaceTypes::WINDOW);
 
     let builder = match format {
         HardwareBufferFormat::R8G8B8A8_UNORM => builder,
