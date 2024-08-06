@@ -123,6 +123,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    // TODO: Api-wise this should take a CurrentContext on which we call .display()
     pub fn new(gl_display: &Display) -> Self {
         unsafe {
             let gl = gl::Gl::load_with(|symbol| {

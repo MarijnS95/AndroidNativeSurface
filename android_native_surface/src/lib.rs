@@ -13,13 +13,16 @@ use jni::{
     JNIEnv,
 };
 use log::{debug, info, LevelFilter};
-use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture};
+use ndk::{native_window::NativeWindow, surface_texture::SurfaceTexture, trace::Section};
 use raw_window_handle::DisplayHandle;
 
 mod support;
 
 fn render_to_native_window(window: NativeWindow) {
+    let _t = Section::new("render_to_native_window").unwrap();
     dbg!(&window);
+
+    let gl_setup = Section::new("GL setup").unwrap();
     // TODO: EGL can update the format of the window by choosing a different format,
     // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
     let format = dbg!(window.format());
@@ -84,21 +87,41 @@ fn render_to_native_window(window: NativeWindow) {
     // Make it current and load symbols.
     let gl_context = gl_context.make_current(&gl_window.surface).unwrap();
 
-    let renderer = support::Renderer::new(&gl_display);
-    renderer.resize(gl_window.window.width(), gl_window.window.height());
+    let renderer = {
+        let _t = Section::new("Renderer setup").unwrap();
+        support::Renderer::new(&gl_display)
+    };
 
-    renderer.draw();
+    gl_setup.end();
 
-    gl_window
-        .surface
-        .swap_buffers(&gl_context)
-        .expect("Cannot swap buffers");
+    {
+        let _t = Section::new("resize").unwrap();
+        renderer.resize(gl_window.window.width(), gl_window.window.height());
+    }
 
-    drop(renderer);
+    {
+        let _t = Section::new("draw").unwrap();
+        renderer.draw();
+    }
 
-    gl_context
-        .make_not_current()
-        .expect("Cannot uncurrent GL context");
+    {
+        let _t = Section::new("swap_buffers").unwrap();
+        gl_window
+            .surface
+            .swap_buffers(&gl_context)
+            .expect("Cannot swap buffers");
+    }
+    {
+        let _t = Section::new("drop renderer").unwrap();
+        drop(renderer);
+    }
+
+    {
+        let _t = Section::new("make_not_current").unwrap();
+        gl_context
+            .make_not_current()
+            .expect("Cannot uncurrent GL context");
+    }
 }
 
 #[no_mangle]
@@ -106,6 +129,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     _env: JNIEnv,
     _class: JClass,
 ) {
+    let _t = Section::new("init").unwrap();
     android_logger::init_once(android_logger::Config::default().with_max_level(LevelFilter::Trace));
 
     let file = {
@@ -137,6 +161,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     _class: JClass,
     surface: JObject,
 ) {
+    let _t = Section::new("renderToSurface").unwrap();
     debug!("Java Surface: {:?}", surface);
 
     let window =
@@ -152,6 +177,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     _class: JClass,
     surface_texture: JObject,
 ) {
+    let _t = Section::new("renderToSurfaceTexture").unwrap();
     debug!("Java SurfaceTexture: {:?}", surface_texture);
 
     let surface_texture = unsafe {
