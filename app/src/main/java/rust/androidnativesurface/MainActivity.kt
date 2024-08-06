@@ -10,31 +10,45 @@ import android.view.TextureView
 
 class MainActivity : Activity() {
     companion object {
+
         init {
             System.loadLibrary("android_native_surface")
             init()
         }
 
         private external fun init()
-        external fun renderToSurface(surface: Surface)
-        external fun renderToSurfaceTexture(surfaceTexture: SurfaceTexture)
+        external fun renderToSurface(gl: NativeGL, surface: Surface)
+        external fun renderToSurfaceTexture(gl: NativeGL, surfaceTexture: SurfaceTexture)
+    }
+
+    class NativeGL {
+        private val mNative: Long = 0
+        private external fun init(self: NativeGL)
+
+        init {
+            init(this)
+        }
+
+        // TODO: Add a destructor
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val gl = NativeGL()
+
         val surfaceView: SurfaceView = findViewById(R.id.surface_view)
         println("SurfaceView: ${surfaceView.holder.surface}")
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 println("SurfaceView created: ${holder.surface}")
-                renderToSurface(holder.surface)
+                renderToSurface(gl, holder.surface)
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
                 println("SurfaceView changed: ${holder.surface}")
-                renderToSurface(holder.surface)
+                renderToSurface(gl, holder.surface)
             }
 
             override fun surfaceDestroyed(p0: SurfaceHolder) {
@@ -52,7 +66,7 @@ class MainActivity : Activity() {
             ) {
                 Surface(surfaceTexture).let { surface ->
                     println("Java TextureView created: $surfaceTexture, $surface")
-                    renderToSurface(surface)
+                    renderToSurface(gl, surface)
                 }
             }
 
@@ -63,7 +77,7 @@ class MainActivity : Activity() {
             ) {
                 Surface(surfaceTexture).let { surface ->
                     println("Java TextureView resized: $surfaceTexture, $surface")
-                    renderToSurface(surface)
+                    renderToSurface(gl, surface)
                 }
             }
 
@@ -86,7 +100,7 @@ class MainActivity : Activity() {
                 p2: Int
             ) {
                 println("Rust TextureView created: $surfaceTexture")
-                renderToSurfaceTexture(surfaceTexture)
+                renderToSurfaceTexture(gl, surfaceTexture)
             }
 
             override fun onSurfaceTextureSizeChanged(
@@ -95,7 +109,7 @@ class MainActivity : Activity() {
                 p2: Int
             ) {
                 println("Rust TextureView resized: $surfaceTexture")
-                renderToSurfaceTexture(surfaceTexture)
+                renderToSurfaceTexture(gl, surfaceTexture)
             }
 
             override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {

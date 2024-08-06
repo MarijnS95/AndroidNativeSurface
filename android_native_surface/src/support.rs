@@ -222,6 +222,7 @@ impl Renderer {
 }
 
 impl Drop for Renderer {
+    // TODO: Note that this needs a "current" context with a surface!
     fn drop(&mut self) {
         unsafe {
             self.gl.DeleteProgram(self.program);
