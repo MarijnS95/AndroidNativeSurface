@@ -18,12 +18,37 @@ use jni::{
 };
 use log::{debug, info, LevelFilter};
 use ndk::{
-    hardware_buffer_format::HardwareBufferFormat, native_window::NativeWindow,
-    surface_texture::SurfaceTexture, trace::Section,
+    hardware_buffer::HardwareBufferUsage,
+    hardware_buffer_format::HardwareBufferFormat,
+    media::image_reader::{AcquireResult, ImageFormat, ImageReader},
+    native_window::NativeWindow,
+    surface_control::{SurfaceControl, SurfaceTransaction},
+    surface_texture::SurfaceTexture,
+    trace::Section,
 };
 use raw_window_handle::DisplayHandle;
 
 mod support;
+
+/// Wraps a [`NativeWindow`], its [`SurfaceControl`], a specially-crafted [`ImageReader`]
+/// and a [`support::GlWindow`] renderer into that `ImageReader`.
+///
+/// The resulting buffers from the [`ImageReader`] have to be manually presented to the
+/// [`SurfaceControl`].  This is just a playground for experimenting with [`SurfaceControl`] as one
+/// would otherwise let the [`support::GlWindow`] present into the [`NativeWindow`] directly.
+///
+/// Alternatively the buffer(s) could be independently allocated and presented, voiding the need for
+/// an intermediary "EGL swapchain" and the [`Surface::swap_buffers()`] machinery with it.
+#[derive(Debug)]
+struct Window {
+    #[allow(dead_code, reason = "Keepalive")]
+    original_window: NativeWindow,
+    surface_control: SurfaceControl,
+    image_reader: ImageReader,
+    render_window: support::GlWindow,
+}
+
+unsafe impl Send for Window {} // TODO: ImageReader?
 
 struct NativeGL {
     gl_display: Display,
@@ -39,8 +64,14 @@ impl NativeGL {
 
         // TODO: EGL can update the format of the window by choosing a different format,
         // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
-        // let format = dbg!(window.format());
-        let format = HardwareBufferFormat::R8G8B8X8_UNORM;
+        // XXX: The X8 format doesn't seem to work, as we cannot make it to match on a GL format
+        // (I'd expect to get it with the default `alpha: 8, transparency: false` selectors...).
+        let format = HardwareBufferFormat::R8G8B8A8_UNORM;
+
+        // TODO: Looking that the window format instead may be interesting, but afaik it's "just"
+        // a preference and used for the internal buffer-producer-consumer which (the dequeue
+        // operation) is "inaccessible" from the public API.  We can present any arbitrary buffer
+        // format to it.
 
         let display_handle = DisplayHandle::android();
 
@@ -103,32 +134,65 @@ impl NativeGL {
         }
     }
 
-    fn create_gl_window(&mut self, window: NativeWindow) -> support::GlWindow {
-        debug!("Add window {window:?}");
+    fn create_gl_window(&mut self, original_window: NativeWindow) -> Window {
+        debug!("Add window {original_window:?}");
         let _t = Section::new("Gl::add_window()").unwrap();
 
         // TODO: Query format from NativeWindow
         // (even though the config implicitly overwrites it)
-        let format = HardwareBufferFormat::R8G8B8X8_UNORM;
+        // let format = dbg!(og_window.format());
+        // TODO: EGL can update the format of the window by choosing a different format,
+        // but not if this producer (Surface/NativeWindow) comes from an ImageReader.
+        let format = HardwareBufferFormat::R8G8B8A8_UNORM;
         let (_gl_context_rc, gl_config) = self
             .gl_contexts
             .get_mut(&format.into())
             .expect("No context/config for format");
 
+        dbg!(&original_window);
+
+        let surface_control = SurfaceControl::create_from_window(&original_window, c"foo")
+            .expect("Failed to create SC on NativeWindow, which requires a bugfix in Android 15");
+
+        let image_format = match format {
+            HardwareBufferFormat::R8G8B8X8_UNORM => ImageFormat::RGBX_8888,
+            HardwareBufferFormat::R8G8B8A8_UNORM => ImageFormat::RGBA_8888,
+            HardwareBufferFormat::R5G6B5_UNORM => ImageFormat::RGB_565,
+            x => todo!("{x:?}"),
+        };
+        let image_reader = ImageReader::new_with_usage(
+            original_window.width(),
+            original_window.height(),
+            image_format,
+            // AImageReader_newWithUsage: format 43 is not supported with usage 0x300 by AImageReader
+            HardwareBufferUsage::GPU_FRAMEBUFFER | HardwareBufferUsage::GPU_SAMPLED_IMAGE,
+            // TODO: Might have to wait until https://android.googlesource.com/platform/frameworks/av/+/master/media/ndk/NdkImageReader.cpp#743 AImageReader_newWithDataSpace() lands
+            4,
+        )
+        .unwrap();
+        let window = image_reader.window().unwrap();
+
         // Create a wrapper for GL window and surface.
-        support::GlWindow::from_existing(&self.gl_display, window, gl_config)
+        let target_window = support::GlWindow::from_existing(&self.gl_display, window, gl_config);
+
+        Window {
+            original_window,
+            surface_control,
+            image_reader,
+            render_window: target_window,
+        }
     }
 
-    fn render_to_gl_window(&mut self, gl_window: &support::GlWindow) {
-        debug!("Render to window {gl_window:?}");
+    fn render_to_gl_window(&mut self, window: &Window) {
+        debug!("Render to window {window:?}");
         let _t = Section::new("Gl::render_to_window()").unwrap();
 
-        let (gl_context_rc, gl_context, gl_window, renderer) = {
+        let (gl_context_rc, gl_context, window, renderer) = {
             let _t = Section::new("Preparation").unwrap();
 
             // TODO: Lazy-init more configs!
             // let format = window.format();
-            let format = HardwareBufferFormat::R8G8B8X8_UNORM;
+            let format = HardwareBufferFormat::R8G8B8A8_UNORM;
             let (gl_context_rc, _gl_config) = self
                 .gl_contexts
                 .get_mut(&format.into())
@@ -136,20 +200,31 @@ impl NativeGL {
             let gl_context = gl_context_rc.take().expect("Didn't put back");
 
             // Make it current and load symbols.
-            let gl_context = gl_context.make_current(&gl_window.surface).unwrap();
+            let gl_context = gl_context
+                .make_current(&window.render_window.surface)
+                .unwrap();
 
             let renderer = self.renderer.get_or_insert_with(|| {
                 let _t = Section::new("Renderer setup").unwrap();
                 support::Renderer::new(&self.gl_display)
             });
 
-            (gl_context_rc, gl_context, gl_window, renderer)
+            (gl_context_rc, gl_context, window, renderer)
         };
 
         {
             let _t = Section::new("resize").unwrap();
-            renderer.resize(gl_window.window.width(), gl_window.window.height());
+            // Should be the same as window.original_window
+            renderer.resize(
+                window.render_window.window.width(),
+                window.render_window.window.height(),
+            );
         }
+
+        let i = &window.image_reader;
+
+        dbg!(i.acquire_next_image());
+        dbg!(unsafe { i.acquire_next_image_async() });
 
         {
             let _t = Section::new("draw").unwrap();
@@ -158,10 +233,43 @@ impl NativeGL {
 
         {
             let _t = Section::new("swap_buffers").unwrap();
-            gl_window
+            window
+                .render_window
                 .surface
                 .swap_buffers(&gl_context)
                 .expect("Cannot swap buffers");
+        }
+
+        let (img, fence) = {
+            let _t = Section::new("acquire_image").unwrap();
+            // let img = i.acquire_next_image().unwrap();
+            // let fence = None;
+            // A buffer only becomes available after swapping
+            let AcquireResult::Image(img_fence) = unsafe { i.acquire_next_image_async() }.unwrap()
+            else {
+                panic!()
+            };
+            img_fence
+        };
+
+        {
+            let _t = Section::new("set").unwrap();
+            let mut t = SurfaceTransaction::new();
+            // t.set_on_commit(Box::new(|stats| {
+            //     dbg!(stats);
+            // }));
+            t.set_on_complete(Box::new(|stats| {
+                dbg!(stats);
+            }));
+            // t.set_visibility(&sc, ndk::surface_control::Visibility::Hide);
+            dbg!(&img);
+            dbg!(&fence);
+            t.set_buffer(
+                &window.surface_control,
+                &img.hardware_buffer().unwrap(),
+                fence,
+            );
+            t.apply();
         }
 
         {
@@ -259,7 +367,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSu
     let _t = Section::new("removeSurface").unwrap();
     debug!("Remove Java Surface from {native_surface_wrapper:?}");
 
-    let gl_window: support::GlWindow =
+    let gl_window: Window =
         unsafe { env.take_rust_field(native_surface_wrapper, "mNative") }.unwrap();
 
     debug!("Removed surface was {gl_window:?}");
@@ -279,8 +387,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSu
     let mut env2 = unsafe { env.unsafe_clone() };
 
     let gl_window =
-        unsafe { env.get_rust_field::<_, _, support::GlWindow>(native_surface_wrapper, "mNative") }
-            .unwrap();
+        unsafe { env.get_rust_field::<_, _, Window>(native_surface_wrapper, "mNative") }.unwrap();
     debug!("Java Surface is {gl_window:?}");
 
     let mut native_gl =
@@ -323,7 +430,7 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSu
     let _t = Section::new("removeSurfaceTexture").unwrap();
     debug!("Remove Java Surface from {native_surface_texture_wrapper:?}");
 
-    let gl_window: support::GlWindow =
+    let gl_window: Window =
         unsafe { env.take_rust_field(native_surface_texture_wrapper, "mNative") }.unwrap();
 
     debug!("Removed surface was {gl_window:?}");
@@ -342,10 +449,9 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024NativeSu
     // SAFETY: TODO
     let mut env2 = unsafe { env.unsafe_clone() };
 
-    let gl_window = unsafe {
-        env.get_rust_field::<_, _, support::GlWindow>(native_surface_texture_wrapper, "mNative")
-    }
-    .unwrap();
+    let gl_window =
+        unsafe { env.get_rust_field::<_, _, Window>(native_surface_texture_wrapper, "mNative") }
+            .unwrap();
     debug!("Java Surface is {gl_window:?}");
 
     let mut native_gl =

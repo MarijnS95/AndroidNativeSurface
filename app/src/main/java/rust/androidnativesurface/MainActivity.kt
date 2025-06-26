@@ -163,6 +163,12 @@ class MainActivity : Activity() {
 
         val javaTextureView: TextureView = findViewById(R.id.java_texture_view)
         println("Java TextureView: ${javaTextureView.surfaceTexture}")
+
+        // Skip SurfaceControl, which is not supported on the surface from a Surfacetexture (this
+        // surface is itself not presented as part of the view hierarchy, but is instead the
+        // producer-end for a buffer that will be uploaded to a GL texture).
+        return
+
         // TODO: This breaks because the Surface() (producer-end) changes for the given SurfaceTexture() (consumer-end)
         javaTextureView.surfaceTextureListener = SurfaceTextureWrapper(gl)
 

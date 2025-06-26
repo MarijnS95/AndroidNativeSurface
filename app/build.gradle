@@ -9,13 +9,13 @@ plugins {
 
 android {
     // Don't have the matching NDK for AGP installed: https://developer.android.com/studio/projects/install-ndk#default-ndk-per-agp
-    ndkVersion '26.3.11579264'
+    ndkVersion '28.1.13356709'
     namespace 'rust.androidnativesurface'
     compileSdk 34
 
     defaultConfig {
         applicationId "rust.androidnativesurface"
-        minSdk 28 // Should remain in sync with the ndk api-level-xx feature in Rust
+        minSdk 29 // Should remain in sync with the ndk api-level-xx feature in Rust
         targetSdk 34
         versionCode 1
         versionName "1.0"

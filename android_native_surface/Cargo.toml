@@ -12,9 +12,13 @@ android_logger = "0.15"
 glutin = { version = "0.32", default-features = false, features = ["egl"] }
 jni = "0.21"
 log = "0.4"
-ndk = { version = "0.9", default-features = false, features = ["api-level-28", "rwh_06"] }
+ndk = { version = "0.9", default-features = false, features = ["media", "api-level-29", "rwh_06"] }
 raw-window-handle = "0.6"
 rustix = { version = "1.0", default-features = false, features = ["std", "pipe", "stdio"] }
 
 [build-dependencies]
 gl_generator = "0.14"
+
+[patch.crates-io]
+# glutin = { path = "../../glutin/glutin" }
+ndk = { path = "../../ndk/ndk" }
