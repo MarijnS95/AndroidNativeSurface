@@ -172,8 +172,8 @@ impl Renderer {
                 gl::STATIC_DRAW,
             );
 
-            let pos_attrib = gl.GetAttribLocation(program, b"position\0".as_ptr() as *const _);
-            let color_attrib = gl.GetAttribLocation(program, b"color\0".as_ptr() as *const _);
+            let pos_attrib = gl.GetAttribLocation(program, c"position".as_ptr() as *const _);
+            let color_attrib = gl.GetAttribLocation(program, c"color".as_ptr() as *const _);
             gl.VertexAttribPointer(
                 pos_attrib as gl::types::GLuint,
                 2,
