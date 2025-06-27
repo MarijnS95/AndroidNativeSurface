@@ -8,7 +8,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-android_logger = "0.14"
+android_logger = "0.15"
 glutin = { version = "0.32", default-features = false, features = ["egl"] }
 jni = "0.21"
 log = "0.4"
