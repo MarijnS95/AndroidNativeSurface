@@ -14,7 +14,7 @@ jni = "0.21"
 log = "0.4"
 ndk = { version = "0.9", default-features = false, features = ["api-level-28", "rwh_06"] }
 raw-window-handle = "0.6"
-rustix = { version = "0.38", default-features = false, features = ["std", "pipe", "stdio"] }
+rustix = { version = "1.0", default-features = false, features = ["std", "pipe", "stdio"] }
 
 [build-dependencies]
 gl_generator = "0.14"
