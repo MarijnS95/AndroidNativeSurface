@@ -183,13 +183,17 @@ pub extern "system" fn Java_rust_androidnativesurface_MainActivity_00024Companio
     let _t = Section::new("init").unwrap();
     android_logger::init_once(
         android_logger::Config::default()
-            .with_max_level(LevelFilter::Trace)
             .with_filter(
                 FilterBuilder::new()
+                    .filter_level(LevelFilter::Trace)
                     // Disable Trace-level messages on JNI crate (specifically around accessing Rust fields)
-                    .filter(Some("jni"), LevelFilter::Debug)
+                    .filter_module("jni", LevelFilter::Debug)
                     .build(),
-            ),
+            )
+            // android_logger erroneously doesn't set log::set_max_level() to the highest
+            // that the filter could match on, hence we have to set it again manually:
+            // https://github.com/rust-mobile/android_logger-rs/issues/80
+            .with_max_level(LevelFilter::Trace),
     );
 
     let file = {
