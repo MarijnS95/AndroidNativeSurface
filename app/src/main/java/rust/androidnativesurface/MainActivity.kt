@@ -31,7 +31,7 @@ class MainActivity : Activity() {
     }
 
     open class NativeSurfaceWrapper(private val gl: NativeGL) {
-        private val mNative: Long = 0 // TODO: var?
+        private var mNative: Long = 0
 
         private external fun setSurface(gl: NativeGL, self: NativeSurfaceWrapper, surface: Surface)
         private external fun removeSurface(self: NativeSurfaceWrapper)
@@ -107,14 +107,12 @@ class MainActivity : Activity() {
         }
     }
 
-    class NativeSurfaceTextureWrapper(private val gl: NativeGL) : NativeSurfaceWrapper(gl),
+    class NativeSurfaceTextureWrapper(private val gl: NativeGL) :
         TextureView.SurfaceTextureListener {
-        private val mNative: Long = 0 // TODO: var?
+        private var mNative: Long = 0
 
         private external fun setSurfaceTexture(
-            gl: NativeGL,
-            self: NativeSurfaceTextureWrapper,
-            surface: SurfaceTexture
+            gl: NativeGL, self: NativeSurfaceTextureWrapper, surface: SurfaceTexture
         )
 
         private external fun removeSurfaceTexture(self: NativeSurfaceTextureWrapper)
@@ -167,7 +165,6 @@ class MainActivity : Activity() {
         println("Java TextureView: ${javaTextureView.surfaceTexture}")
         // TODO: This breaks because the Surface() (producer-end) changes for the given SurfaceTexture() (consumer-end)
         javaTextureView.surfaceTextureListener = SurfaceTextureWrapper(gl)
-
 
         val rustTextureView: TextureView = findViewById(R.id.rust_texture_view)
         println("Rust TextureView: ${rustTextureView.surfaceTexture}")
